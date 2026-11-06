@@ -1,0 +1,33 @@
+{
+  "name": "ai-dev-workflow",
+  "owner": { "name": "吕治易" },
+  "description": "AI 协作开发工作流：通用流程 + 技术栈 + 设计工具 + 接口工具，按维度组合安装",
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
+  "plugins": [
+    {
+      "name": "workflow-core",
+      "source": "./plugins/workflow-core",
+      "description": "通用开发流程：三档分级、PRD 拆解、开工检查、分段实施、验证失败分类、统一交付、中断交接"
+    },
+    {
+      "name": "stack-flutter",
+      "source": "./plugins/stack-flutter",
+      "description": "Flutter 技术栈惯例：版本核对、analyze/test/build 命令、各平台验证方法"
+    },
+    {
+      "name": "design-pixso",
+      "source": "./plugins/design-pixso",
+      "description": "Pixso 设计来源：MCP 接入、节点定位、读取层级与视觉核对"
+    },
+    {
+      "name": "api-apifox",
+      "source": "./plugins/api-apifox",
+      "description": "Apifox 接口契约：CLI/MCP 读取、操作授权边界、Mock 与真实联调"
+    },
+    {
+      "name": "preset-flutter-pixso-apifox",
+      "source": "./plugins/preset-flutter-pixso-apifox",
+      "description": "组合包：Flutter + Pixso + Apifox 项目一次装齐（含 Context7、Superpowers）"
+    }
+  ]
+}
