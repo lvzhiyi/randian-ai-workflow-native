@@ -65,6 +65,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 
 用户同意后，再在 `.claude/settings.json` 写入 `extraKnownMarketplaces` 和 `enabledPlugins`，让团队成员打开项目时收到安装提示：已有文件时合并，不覆盖其他设置。
 
+`extraKnownMarketplaces` 除了 `ai-dev-workflow`，还要列出所选插件依赖的**其他 marketplace**：依赖解析不会自动添加 marketplace，缺了依赖就装不上。例如 Flutter preset 依赖官方 `dart-flutter`，需要加 `"dart-flutter": {"source": {"source": "github", "repo": "flutter/agent-plugins"}}`（`claude-plugins-official` 是内置的，不用加）。
+
 ## 5. 收尾
 
 - 不提交、不推送；告诉用户改了哪些文件，并建议提交，这样团队共用同一份配置。

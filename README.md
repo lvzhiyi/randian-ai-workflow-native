@@ -23,7 +23,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 | `stack-flutter` | 技术栈 | 版本核对、默认检查脚本、Stop 钩子兜底静态分析、平台验证口径、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
-| `preset-flutter-pixso-apifox` | 组合包 | 依赖以上四个 + 官方 `context7`、`superpowers`，一次装齐 |
+| `preset-flutter-pixso-apifox` | 组合包 | 依赖以上四个 + 官方 `context7`、`superpowers`、`dart-flutter`（Dart and Flutter），一次装齐 |
 
 ```mermaid
 flowchart TB
@@ -206,7 +206,20 @@ claude plugin install preset-flutter-pixso-apifox@ai-dev-workflow
 claude plugin install workflow-core@ai-dev-workflow
 ```
 
-`preset` 依赖官方 marketplace 的 `context7` 和 `superpowers`。本仓库 `marketplace.json` 已把 `claude-plugins-official` 加入跨 marketplace 白名单；本机还需要已添加官方 marketplace（Claude Code 默认已内置）。
+`preset` 还依赖三个外部插件，本仓库 `marketplace.json` 已把它们所在的 marketplace 加入跨 marketplace 白名单：
+
+| 插件 | 所在 marketplace | 本机需要 |
+| --- | --- | --- |
+| `context7`、`superpowers` | `claude-plugins-official` | 内置，无需操作 |
+| `dart-flutter`（官方 Dart and Flutter：Flutter/Dart 技能 + Dart MCP server） | `dart-flutter`（`flutter/agent-plugins`） | **安装 preset 前先添加**，见下 |
+
+```bash
+claude plugin marketplace add flutter/agent-plugins
+```
+
+依赖解析不会自动添加 marketplace：没添加时 preset 能装上，但会提示 `dart-flutter` 未安装且 preset 显示加载失败。preset 本身没有内容，**不影响** workflow-core、stack-flutter 等插件正常工作；补上 marketplace 后重新执行 `install` 即可。用项目 `.claude/settings.json` 分发时（见下文）已包含这个 marketplace，团队成员不用手动添加。
+
+> `dart-flutter` 也出现在内置的 Anthropic 插件目录里，但 CLI 无法按名称从内置目录解析它，所以依赖指向它自己的 marketplace。
 
 ### 3. 额外前置（插件无法代装）
 
@@ -237,6 +250,9 @@ claude plugin install workflow-core@ai-dev-workflow
   "extraKnownMarketplaces": {
     "ai-dev-workflow": {
       "source": { "source": "github", "repo": "lvzhiyi/randian-ai-workflow-native" }
+    },
+    "dart-flutter": {
+      "source": { "source": "github", "repo": "flutter/agent-plugins" }
     }
   },
   "enabledPlugins": {
@@ -245,7 +261,7 @@ claude plugin install workflow-core@ai-dev-workflow
 }
 ```
 
-成员信任该目录后，Claude Code 会提示添加 marketplace 并安装插件。
+成员信任该目录后，Claude Code 会提示添加 marketplace 并安装插件。依赖其他 marketplace 的插件，要把那些 marketplace 也列进 `extraKnownMarketplaces`（`init` 会自动处理）。
 
 ### 3. 日常使用
 

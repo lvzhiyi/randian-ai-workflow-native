@@ -1,8 +1,8 @@
 {
   "name": "preset-flutter-pixso-apifox",
   "displayName": "Preset: Flutter + Pixso + Apifox",
-  "version": "0.1.0",
-  "description": "组合包：Flutter 项目 + Pixso 设计 + Apifox 接口，一次装齐，含 Context7 与 Superpowers",
+  "version": "0.2.0",
+  "description": "组合包：Flutter 项目 + Pixso 设计 + Apifox 接口，一次装齐，含 Context7、Superpowers 与官方 Dart and Flutter 插件（需先添加 flutter/agent-plugins marketplace）",
   "author": { "name": "吕治易" },
   "license": "UNLICENSED",
   "dependencies": [
@@ -11,6 +11,7 @@
     "design-pixso",
     "api-apifox",
     { "name": "context7", "marketplace": "claude-plugins-official" },
-    { "name": "superpowers", "marketplace": "claude-plugins-official" }
+    { "name": "superpowers", "marketplace": "claude-plugins-official" },
+    { "name": "dart-flutter", "marketplace": "dart-flutter" }
   ]
 }

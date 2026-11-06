@@ -7,6 +7,18 @@ description: Flutter/Dart 项目的技术栈惯例。在 Flutter 项目里写代
 
 只放**任何 Flutter 项目都成立**的做法。状态管理选型（Bloc/Riverpod/…）、目录分层、默认验证哪些平台属于项目约定，读项目的 `docs/` 和「工作流配置」。
 
+## 与官方 Dart and Flutter 插件的分工
+
+官方插件 `dart-flutter`（来自 `flutter/agent-plugins`，preset 已依赖）提供 Flutter/Dart 通用技能和 Dart MCP server。分工：
+
+| 需要什么 | 用哪个 |
+| --- | --- |
+| Flutter/Dart API 用法、通用最佳实践、pub.dev 包查询、Dart MCP 的分析/格式/测试/运行工具 | 官方 `dart-flutter` |
+| 版本核对口径、本团队的检查流程与交付证据、Stop 钩子兜底、常见坑 | 本技能 `stack-flutter` |
+| 项目自己的架构分层、状态管理选型、目录约定 | 项目 `docs/` 与「工作流配置」 |
+
+官方技能的建议与项目规范冲突时以项目规范为准（例如官方示例用 Riverpod，项目用 Bloc）。Dart MCP 工具跑出的分析或测试结果可以作为验证证据，但交付时仍要写明实际执行了什么。
+
 ## 版本核对（配合 `workflow-core:tech-docs`）
 
 - 依赖：`pubspec.yaml` 看约束，`pubspec.lock` 看实际解析版本；Git 依赖核对 `ref` 与锁定的 `resolved-ref`。
