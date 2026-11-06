@@ -12,7 +12,7 @@
     {
       "name": "stack-flutter",
       "source": "./plugins/stack-flutter",
-      "description": "Flutter 技术栈惯例：版本核对、analyze/test/build 命令、各平台验证方法"
+      "description": "Flutter 技术栈惯例：版本核对、默认检查脚本、Stop 钩子兜底静态分析、各平台验证方法"
     },
     {
       "name": "design-pixso",

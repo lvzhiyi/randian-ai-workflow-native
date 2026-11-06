@@ -1,8 +1,8 @@
 {
   "name": "stack-flutter",
   "displayName": "Stack: Flutter",
-  "version": "0.1.0",
-  "description": "Flutter 技术栈惯例：SDK 与依赖版本核对、analyze/test/build 命令、各平台验证方法",
+  "version": "0.2.0",
+  "description": "Flutter 技术栈惯例：版本核对、默认检查脚本（格式/analyze/测试）、Stop 钩子兜底静态分析、各平台验证方法",
   "author": { "name": "吕治易" },
   "license": "UNLICENSED",
   "keywords": ["flutter", "dart"],

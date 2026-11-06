@@ -1,0 +1,17 @@
+{
+  "description": "AI 结束回合前，对本次改动的手写 Dart 文件运行 dart analyze；有 error 时让 AI 先修复",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/stop_analyze.py"],
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

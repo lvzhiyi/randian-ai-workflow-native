@@ -14,9 +14,31 @@ description: Flutter/Dart 项目的技术栈惯例。在 Flutter 项目里写代
 - 改依赖时同时检查 `pubspec.lock` 的变化；不为套用文档示例升级依赖。
 - 查 pub 包文档时写明包名 + 锁定版本 + 平台。
 
-## 常用检查命令
+## 默认检查脚本
 
-项目配置里有封装好的检查脚本时优先用脚本；否则按需组合：
+项目「工作流配置」写了验证命令（如 `python3 scripts/check.py full`）时用项目的；没有时用本插件自带的：
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/flutter_check.py"                    # 改动文件格式 + analyze + 全部测试
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/flutter_check.py" test/x_test.dart   # 只跑指定测试
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/flutter_check.py" --all              # 格式检查 lib/ test/ 全部手写文件
+```
+
+- 格式检查只看相对 HEAD 改动和新增的手写 Dart 文件，自动排除 `.g.dart`、`.freezed.dart` 等生成文件。
+- 输出 `status=PASS / CHECK_FAILED / BLOCKED / SKIPPED`；退出码 0 通过、1 未通过、2 执行受阻。`--no-test` 跳过测试时，交付必须说明原因。
+- 已处理 git 钩子环境的 `GIT_DIR` 问题。
+
+## Stop 钩子（自动兜底）
+
+本插件启用后，AI 每次准备结束回合时，会对**相对 HEAD 改动的手写 Dart 文件**运行 `dart analyze`：
+
+- 有 error 时，钩子把错误位置反馈给 AI，要求先修复再结束；第二轮仍有错误时只提示用户，不再阻止，避免死循环。
+- 没改 Dart 文件、不是 Flutter 项目、分析器不可用或超时（90 秒）时直接放行。
+- 它只兜底 error 级静态分析，**不替代** `workflow-core:verify` 要求的格式检查和测试；已经提交的改动不在检查范围内。
+
+## 常用命令
+
+按需单独执行：
 
 | 目的 | 命令 |
 | --- | --- |

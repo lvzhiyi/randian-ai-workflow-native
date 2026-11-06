@@ -20,7 +20,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 | 插件 | 维度 | 内容 |
 | --- | --- | --- |
 | `workflow-core` | 通用流程 | 项目接入初始化（`init`）、文档规范检查脚本、总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、统一交付、中断交接 |
-| `stack-flutter` | 技术栈 | 版本核对、analyze/test/build 命令、平台验证口径、生成代码、常见坑 |
+| `stack-flutter` | 技术栈 | 版本核对、默认检查脚本、Stop 钩子兜底静态分析、平台验证口径、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
 | `preset-flutter-pixso-apifox` | 组合包 | 依赖以上四个 + 官方 `context7`、`superpowers`，一次装齐 |
@@ -289,6 +289,9 @@ ai-dev-workflow/
     │   ├── scripts/check_docs.py        # 文档规范检查（链接/锚点、任务卡字段、待确认格式）
     │   └── templates/                   # 项目配置、交接、受阻、任务卡模板
     ├── stack-flutter/
+    │   ├── scripts/flutter_check.py     # 默认检查：格式 + analyze + 测试
+    │   ├── scripts/stop_analyze.py      # Stop 钩子脚本
+    │   └── hooks/hooks.json             # 注册 Stop 钩子
     ├── design-pixso/                    # 含 .mcp.json
     ├── api-apifox/
     └── preset-flutter-pixso-apifox/     # 只有 plugin.json 的 dependencies
@@ -314,7 +317,19 @@ ai-dev-workflow/
 | 脚本 | 用途 | 调用方 |
 | --- | --- | --- |
 | `workflow-core/skills/init/detect.sh` | 只读探测项目技术栈、规格/设计/接口工具、文档结构、检查命令 | `init` 技能 |
+| `stack-flutter/scripts/flutter_check.py` | 改动文件格式检查 + `flutter analyze` + 测试；项目没配置检查命令时的默认检查 | `verify`、`stack-flutter:flutter` 技能 |
+| `stack-flutter/scripts/stop_analyze.py` | Stop 钩子：结束回合前对改动的 Dart 文件跑 `dart analyze`，有 error 让 AI 先修 | `stack-flutter/hooks/hooks.json` |
 | `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式；路径读「工作流配置」，可用参数覆盖 | `prd-breakdown`、`verify` 技能；项目 CI |
+
+**插件不依赖项目脚本**：技能只调用插件自带的脚本，项目里没有 `check.py` 之类的入口也能正常工作；项目有自己的检查入口时，写进「工作流配置」后优先使用项目的。
+
+**代码检查不会被漏掉**：分三层保证。
+
+```mermaid
+flowchart LR
+    R["规则层<br/>verify / deliver：改代码必须有<br/>格式 + 静态分析 + 相关测试"] --> C["命令层<br/>项目配置命令 →<br/>技术栈默认脚本"]
+    C --> H["强制层<br/>stack-* Stop 钩子：<br/>有 analyze error 不让结束"]
+```
 
 **哪些脚本放插件、哪些留项目**：只服务 AI 工作流、与具体项目无关、项目离开它照样能运行，三条都满足才放插件。构建、发布、代码生成、提交钩子、`flutter analyze/test` 这类项目运行要依赖的脚本留在项目里，否则没装插件的 CI 和同事就跑不了。
 
@@ -341,12 +356,16 @@ python3 ~/.claude/plugins/cache/ai-dev-workflow/workflow-core/<版本>/scripts/c
 python3 -m unittest discover -s plugins/workflow-core/scripts -p 'test_check_docs.py'
 ```
 
+```bash
+python3 -m unittest discover -s plugins/stack-flutter/scripts -p 'test_*.py'
+```
+
 ## 扩展：新增阶段、技术栈或工具
 
 - **新增流程阶段**：在 `workflow-core/skills/` 下新建 `<阶段>/SKILL.md`，在 `workflow` 技能的阶段地图和本 README 的全景图里登记。技能里只写抽象步骤，具体命令留给维度插件或项目配置。
 - **新增技术栈**（如 `stack-vue`）：复制 `stack-flutter` 结构，只写该栈的通用惯例；在 `marketplace.json` 登记；按需新建 preset。
 - **新增设计/接口工具**（如 `design-figma`）：MCP 配置放插件 `.mcp.json`，凭据用环境变量或 `userConfig` 的 `sensitive` 字段，不写进仓库。
-- **强制规则**：靠文字约束不可靠的（如禁止自动 `git push`），后续可在插件 `hooks/hooks.json` 用 `PreToolUse` 钩子拦截。
+- **强制规则**：靠文字约束不可靠的，用插件 `hooks/hooks.json` 兜底，参考 `stack-flutter` 的 Stop 钩子。新技术栈插件（如 `stack-vue`）可以照此用 `tsc --noEmit` / `eslint` 实现同样的兜底。
 
 ## 路线图
 
