@@ -89,7 +89,9 @@ flowchart LR
     C -->|有| D["集中一次提问<br/>给推荐值"]
     C -->|无| E
     D --> E["展示 配置项 / 值 / 依据<br/>与小节草稿"]
-    E -->|确认| F["写入 AGENTS.md<br/>可选 .claude/settings.json"]
+    E -->|确认| F["写入 AGENTS.md<br/>工作流配置"]
+    F --> G["文档骨架：映射已有文档<br/>列清单确认后只补缺失的"]
+    G --> H["可选：.claude/settings.json<br/>团队安装提示"]
 ```
 
 已有配置时进入更新模式：逐项对比，只改有变化的行，保留手写的项目约定。不提交、不自动删改项目里重复的流程文档，只列出迁移建议。
@@ -194,7 +196,19 @@ claude plugin marketplace add /Users/lv/work/randian/ai-dev-workflow
 
 ### 2. 安装插件
 
-一次装齐（推荐）：
+**先选安装范围**：插件只在启用它的范围内生效。
+
+| 范围 | 参数 | 写入位置 | 生效范围 | 适合 |
+| --- | --- | --- | --- | --- |
+| user | 默认（不加） | `~/.claude/settings.json` | 你本机所有项目 | `workflow-core`：和技术栈无关，装一次处处可用 |
+| project | `--scope project` | 项目 `.claude/settings.json`（进 git） | 该项目，团队共享 | 技术栈、设计、接口插件和 preset |
+| local | `--scope local` | 项目 `.claude/settings.local.json`（不进 git） | 该项目，只有你自己 | 个人试用 |
+
+> 常见坑：用 `--scope local` 装过后，换到别的项目会看到插件被列出但显示 `disabled`，也没有 `/workflow-core:init`。marketplace 是用户级的所以能列出，启用只记录在原项目里。需要的话在新项目再装一次，或把 `workflow-core` 装成 user 范围。
+
+推荐组合：`workflow-core` 装 user 范围；进入新项目后先跑 `/workflow-core:init`，它会按技术栈建议该装哪些维度插件。
+
+一次装齐（Flutter + Pixso + Apifox 项目）：
 
 ```bash
 claude plugin install preset-flutter-pixso-apifox@ai-dev-workflow
@@ -229,7 +243,7 @@ claude plugin marketplace add flutter/agent-plugins
 
 ## 在项目中使用
 
-### 1. 生成项目工作流配置（每个项目一次）
+### 1. 初始化：工作流配置 + 文档骨架（每个项目一次）
 
 在项目里执行：
 
@@ -239,7 +253,40 @@ claude plugin marketplace add flutter/agent-plugins
 
 它会只读扫描项目（技术栈、OpenSpec、`.apifox/`、设计链接、`docs/` 结构、检查脚本与 CI），只就识别不了的项提问（如默认验证平台、多个候选设计文件），展示「配置项 | 值 | 依据」后经你确认写入 `AGENTS.md` 的「工作流配置」小节，并可按需生成 `.claude/settings.json` 的插件提示。
 
-这份配置**按项目写一次、提交进 git**，团队成员和其他 Agent 共用，不需要每人手写。项目约定变化时再次运行 `init` 会进入更新模式，只改有变化的行。字段说明见 [`templates/project-config.md`](plugins/workflow-core/templates/project-config.md)。
+接着补齐流程需要的文档骨架（已有同类文档的只做映射，不新建；已有文件一律不覆盖）。
+
+**流程在插件里，事实在项目里**：三档、拆解、交接、交付这些流程说明由插件技能承载，项目里**不需要** `ai-workflow.md` 之类的流程文档；项目只放流程的输入和产物。
+
+```mermaid
+flowchart LR
+    subgraph INIT["init 生成"]
+        H["product/项目首页.md"]
+        R["product/需求/需求说明.md"]
+        O["product/任务/版本任务总览.md"]
+        DI["product/设计/设计索引.md<br/>（有设计工具）"]
+        E["development/coding · architecture · testing<br/>ui（有界面）· api-integration（有接口）"]
+    end
+    subgraph LATER["后续阶段按需生成"]
+        C["product/任务/模块名.md<br/>prd-breakdown 首次拆出模块"]
+        HO["development/handoffs/任务名.md<br/>handoff 首次跨会话"]
+    end
+    R --> C
+    O --> C
+    DI --> C
+    E --> HO
+```
+
+| 文档 | 维护什么 | 被哪些技能使用 |
+| --- | --- | --- |
+| 项目首页 | 文档导航与协作约定 | `handoff` 恢复时定位 |
+| 需求说明 | 业务规则、待确认问题 | `prd-breakdown`、`kickoff` |
+| 版本任务总览 / 模块卡 | 模块优先级 / 子需求状态与验收 | `prd-breakdown`、`check_docs.py` |
+| 设计索引 | 设计文件、节点映射、主稿确认 | `prd-breakdown`、`design-*` |
+| coding / architecture / ui / api-integration / testing | 项目工程约定与检查命令 | `kickoff`、`implement`、`verify`、`api-contract` |
+
+模板在 [`templates/docs/`](plugins/workflow-core/templates/docs/)。init 用探测到的事实填写（如 `testing.md` 的真实命令、`architecture.md` 按现有目录推断的分层并标「待确认」），不留空壳。
+
+这份配置和文档**按项目写一次、提交进 git**，团队成员和其他 Agent 共用，不需要每人手写。项目约定变化时再次运行 `init` 会进入更新模式，只改有变化的行。字段说明见 [`templates/project-config.md`](plugins/workflow-core/templates/project-config.md)。
 
 ### 2. 让团队成员打开项目就收到安装提示
 

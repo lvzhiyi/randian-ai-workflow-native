@@ -8,7 +8,7 @@ workflow-core 的各技能会到这里取路径和命令；不适用的项写“
 - 产品文档根：`docs/product/`（项目首页：`docs/product/项目首页.md`）
 - 需求说明：`docs/product/需求/需求说明.md`
 - 任务卡目录 / 总览：`docs/product/任务/` / `docs/product/任务/版本任务总览.md`
-- 设计索引：`docs/product/设计/<设计工具>设计关联.md`
+- 设计索引：`docs/product/设计/设计索引.md`
 - 工程规范：`docs/development/` 下的 coding / architecture / ui / api-integration / testing
 - 规格工具：OpenSpec（`openspec/`）｜无
 - 交接目录：有变更时 `openspec/changes/<change-id>/handoff.md`；否则 `docs/development/handoffs/<task-id>.md`
