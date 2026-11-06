@@ -19,7 +19,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 
 | 插件 | 维度 | 内容 |
 | --- | --- | --- |
-| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、统一交付、中断交接 |
+| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、文档规范检查脚本、总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、统一交付、中断交接 |
 | `stack-flutter` | 技术栈 | 版本核对、analyze/test/build 命令、平台验证口径、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
@@ -272,7 +272,8 @@ claude plugin install workflow-core@ai-dev-workflow
 | `ai-workflow.md` Apifox 接口契约 | `api-apifox` |
 | `api-integration.md` 契约清单、Mock 与真实联调、测试数据 | `workflow-core:api-contract`；项目 `NetManager`、环境变量等接入边界留项目 |
 | `需求拆解与执行流程.md` 第 1～7、9 节 | `workflow-core:prd-breakdown` + `templates/task-card.md` |
-| `需求拆解与执行流程.md` 第 8 节、默认只验 Android、`scripts/check.py` | 项目「工作流配置」 |
+| `需求拆解与执行流程.md` 第 8 节、默认只验 Android | 项目「工作流配置」 |
+| `scripts/check.py docs` 的链接与任务卡检查 | `workflow-core/scripts/check_docs.py`；`check.py` 保留 `git diff --check` 与 `full` 的 Flutter 检查 |
 | `architecture.md`、`ui.md`、`coding.md` | 留在项目（项目特有） |
 
 ## 开发与发布本仓库
@@ -285,6 +286,7 @@ ai-dev-workflow/
     │   ├── .claude-plugin/plugin.json
     │   ├── skills/<阶段>/SKILL.md       # 每个阶段一个技能
     │   ├── skills/init/detect.sh        # init 用的只读项目探测脚本
+    │   ├── scripts/check_docs.py        # 文档规范检查（链接/锚点、任务卡字段、待确认格式）
     │   └── templates/                   # 项目配置、交接、受阻、任务卡模板
     ├── stack-flutter/
     ├── design-pixso/                    # 含 .mcp.json
@@ -293,7 +295,7 @@ ai-dev-workflow/
 ```
 
 - **边改边用**：本地路径添加的 marketplace 不受 `version` 锁定，改完 SKILL.md 在会话里执行 `/reload-plugins` 即生效；临时调试也可以 `claude --plugin-dir ./plugins/workflow-core`。
-- **校验**：提交前运行。
+- **校验**：提交前运行插件校验和脚本单测。
 
   ```bash
   for p in plugins/*/; do claude plugin validate "$p" --strict; done
@@ -306,6 +308,38 @@ ai-dev-workflow/
   ```
 
   tag 格式为 `<插件名>--v<版本>`，依赖方的版本约束（如 `^0.2`）按 tag 解析。`0.x` 表示仍在变动。
+
+## 插件自带脚本
+
+| 脚本 | 用途 | 调用方 |
+| --- | --- | --- |
+| `workflow-core/skills/init/detect.sh` | 只读探测项目技术栈、规格/设计/接口工具、文档结构、检查命令 | `init` 技能 |
+| `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式；路径读「工作流配置」，可用参数覆盖 | `prd-breakdown`、`verify` 技能；项目 CI |
+
+**哪些脚本放插件、哪些留项目**：只服务 AI 工作流、与具体项目无关、项目离开它照样能运行，三条都满足才放插件。构建、发布、代码生成、提交钩子、`flutter analyze/test` 这类项目运行要依赖的脚本留在项目里，否则没装插件的 CI 和同事就跑不了。
+
+**在 CI 中运行文档检查**：CI 里没有 Claude 插件，额外签出本仓库的固定 tag 运行同一份脚本，版本可复现：
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    repository: lvzhiyi/randian-ai-workflow-native
+    ref: workflow-core--v0.3.0
+    path: .ai-workflow
+- run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
+```
+
+本地手动运行（Python 3.8+，仅标准库）：
+
+```bash
+python3 ~/.claude/plugins/cache/ai-dev-workflow/workflow-core/<版本>/scripts/check_docs.py --root .
+```
+
+修改脚本后跑单测：
+
+```bash
+python3 -m unittest discover -s plugins/workflow-core/scripts -p 'test_check_docs.py'
+```
 
 ## 扩展：新增阶段、技术栈或工具
 
