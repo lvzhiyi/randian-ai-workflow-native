@@ -1,6 +1,6 @@
 <!--
-把下面的「工作流配置」小节复制到项目根目录的 AGENTS.md（或 CLAUDE.md），按项目实际填写。
-workflow-core 的各技能会到这里取路径和命令；不适用的项写“无”，不要留示例值。
+推荐在项目里运行 /workflow-core:init 自动探测并生成本小节；也可以手动复制到项目根目录的 AGENTS.md（或 CLAUDE.md）后按实际填写。
+workflow-core 的各技能会到这里取路径和命令；不适用的项写“无”，未确认的写“待确认”，不要留示例值。
 -->
 
 ## 工作流配置（ai-dev-workflow）

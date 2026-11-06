@@ -19,7 +19,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 
 | 插件 | 维度 | 内容 |
 | --- | --- | --- |
-| `workflow-core` | 通用流程 | 总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、统一交付、中断交接 |
+| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、统一交付、中断交接 |
 | `stack-flutter` | 技术栈 | 版本核对、analyze/test/build 命令、平台验证口径、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
@@ -50,6 +50,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
+    INIT["接入（每个项目一次）<br/>init → 工作流配置"] -.-> T
     IN([用户需求 / PRD / Bug]) --> T{"0 分档<br/>tiering"}
     T -->|轻量| K
     T -->|标准| K
@@ -78,6 +79,20 @@ flowchart LR
 轻量任务通常走 0 → 4 → 5 → 6；只做需求整理的任务停在 1。中断交接（`handoff`）可以在任何阶段发生。
 
 ## 各阶段说明
+
+### 接入 · `init`
+
+```mermaid
+flowchart LR
+    A["detect.sh 只读探测"] --> B["补读规范<br/>确认命令与权威来源"]
+    B --> C{"还有识别<br/>不了的项？"}
+    C -->|有| D["集中一次提问<br/>给推荐值"]
+    C -->|无| E
+    D --> E["展示 配置项 / 值 / 依据<br/>与小节草稿"]
+    E -->|确认| F["写入 AGENTS.md<br/>可选 .claude/settings.json"]
+```
+
+已有配置时进入更新模式：逐项对比，只改有变化的行，保留手写的项目约定。不提交、不自动删改项目里重复的流程文档，只列出迁移建议。
 
 ### 0 分档 · `tiering`
 
@@ -201,9 +216,17 @@ claude plugin install workflow-core@ai-dev-workflow
 
 ## 在项目中使用
 
-### 1. 写项目工作流配置
+### 1. 生成项目工作流配置（每个项目一次）
 
-把 [`plugins/workflow-core/templates/project-config.md`](plugins/workflow-core/templates/project-config.md) 的「工作流配置」小节复制进项目 `AGENTS.md`（或 `CLAUDE.md`），填上产品文档根、规格工具、交接目录、各档验证命令、默认验证平台、设计工具、接口工具。各技能从这里取路径和命令。
+在项目里执行：
+
+```
+/workflow-core:init
+```
+
+它会只读扫描项目（技术栈、OpenSpec、`.apifox/`、设计链接、`docs/` 结构、检查脚本与 CI），只就识别不了的项提问（如默认验证平台、多个候选设计文件），展示「配置项 | 值 | 依据」后经你确认写入 `AGENTS.md` 的「工作流配置」小节，并可按需生成 `.claude/settings.json` 的插件提示。
+
+这份配置**按项目写一次、提交进 git**，团队成员和其他 Agent 共用，不需要每人手写。项目约定变化时再次运行 `init` 会进入更新模式，只改有变化的行。字段说明见 [`templates/project-config.md`](plugins/workflow-core/templates/project-config.md)。
 
 ### 2. 让团队成员打开项目就收到安装提示
 
@@ -230,6 +253,7 @@ claude plugin install workflow-core@ai-dev-workflow
 
 | 场景 | 调用 |
 | --- | --- |
+| 项目第一次接入 / 约定变化 | `/workflow-core:init` |
 | 不确定从哪开始 | `/workflow-core:workflow` |
 | 拿到一份 PRD | `/workflow-core:prd-breakdown` |
 | 判断档位 | `/workflow-core:tiering` |
@@ -260,6 +284,7 @@ ai-dev-workflow/
     ├── workflow-core/
     │   ├── .claude-plugin/plugin.json
     │   ├── skills/<阶段>/SKILL.md       # 每个阶段一个技能
+    │   ├── skills/init/detect.sh        # init 用的只读项目探测脚本
     │   └── templates/                   # 项目配置、交接、受阻、任务卡模板
     ├── stack-flutter/
     ├── design-pixso/                    # 含 .mcp.json
