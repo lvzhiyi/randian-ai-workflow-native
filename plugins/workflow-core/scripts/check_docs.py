@@ -6,7 +6,7 @@
 2. 模块任务卡：子需求小节的必填字段，以及结构化「待确认」记录的五段格式。
 3. 术语表（配置了 docs.glossary 时）：每个词条有「定义」字段、词条不重名。
 
-路径从项目配置读取（见 workflow_config.py：ai-workflow.yaml 优先，旧格式 Markdown 小节兼容），命令行参数优先。
+路径从项目根目录 ai-workflow.yaml 读取（见 workflow_config.py），命令行参数优先，都没有时用默认值。
 用法：python3 check_docs.py [--root 项目根] [--product-root DIR] [--cards-dir DIR] [--dev-docs DIR] [--check-config]
 退出码：0 通过；1 检查未通过；2 执行受阻（如项目根不存在、配置无法解析）。
 """
@@ -181,9 +181,6 @@ def main(argv=None):
     product_root, cards_dir, dev_docs = resolve_paths(root, args, config)
     print(f'[docs] 路径来源：{config.source}；产品文档根={product_root.relative_to(root)}，'
           f'任务卡={cards_dir.relative_to(root)}，工程规范={dev_docs.relative_to(root)}', flush=True)
-    if config.legacy:
-        print('[docs] 提示：配置仍在 Markdown 小节，建议运行 /workflow-core:init 迁移到 ai-workflow.yaml',
-              flush=True)
 
     paths = collect_docs(root, product_root, dev_docs)
     link_errors = check_links(root, paths)

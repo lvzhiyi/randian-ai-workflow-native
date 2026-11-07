@@ -21,7 +21,6 @@ description: AI 协作开发工作流总入口。开始任何开发任务（需�
 
 开工先读项目根目录的 `ai-workflow.yaml`，取得：文档路径（`docs.*`，含术语表 `docs.glossary`）、规格工具（`spec.*`）、交接目录（`handoff.*`）、评审基线（`review.base_branch`）、各档验证命令（`verify.*`）、验证平台（`platforms.*`）、设计与接口工具（`design.*`、`api.*`）。下文写成 `verify.standard` 这类键名时，都指这个文件里的值。
 
-- 只有旧格式（`AGENTS.md` / `CLAUDE.md` 里的「工作流配置」Markdown 小节）：照常读取，交付时提示运行 `/workflow-core:init` 迁移。
 - 配置了术语表时，沟通、文档和代码命名使用表里的词；遇到表里没有、含糊或一词多义的业务词，在交付“剩余”中提议新增词条，由用户确认后再写入。
 
 - 找不到配置：本次按默认值推进（无规格工具、交接写会话、验证命令从项目脚本和 README 推断），并在交付时提示用户运行 `/workflow-core:init` 生成配置；不在当前任务中途自行写入配置。

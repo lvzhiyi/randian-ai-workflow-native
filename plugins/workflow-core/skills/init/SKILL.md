@@ -1,6 +1,6 @@
 ---
 name: init
-description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，并按需生成文档骨架（项目首页、需求说明、任务总览、设计索引、术语表、工程规范）。项目第一次接入 ai-dev-workflow 插件、项目根还没有 ai-workflow.yaml、配置仍是 AGENTS.md/CLAUDE.md 里的旧格式 Markdown 小节需要迁移、用户说“初始化工作流 / 接入插件 / 生成工作流配置”，或项目的技术栈、设计工具、接口工具、验证命令发生变化需要刷新配置时使用。
+description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，并按需生成文档骨架（项目首页、需求说明、任务总览、设计索引、术语表、工程规范）。项目第一次接入 ai-dev-workflow 插件、项目根还没有 ai-workflow.yaml、用户说“初始化工作流 / 接入插件 / 生成工作流配置”，或项目的技术栈、设计工具、接口工具、验证命令发生变化需要刷新配置时使用。
 ---
 
 # 初始化项目工作流配置与文档骨架
@@ -31,7 +31,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 | 验证命令 | `check_entry`、`make_targets`、`package_scripts`、`ci` | 测试/验证规范、`scripts/` 说明、CI 文件中的实际命令 |
 | 默认验证平台 | 测试/验证规范中的约定 | — |
 | 代码产物要求 | 代码规范中的注释、生成代码规则 | — |
-| 已有配置 | `existing_workflow_config` | `ai-workflow.yaml` 全文（进入更新模式），或旧格式 Markdown 小节全文（进入迁移模式） |
+| 已有配置 | `existing_workflow_config` | `ai-workflow.yaml` 全文（进入更新模式） |
 
 **取值规则**：
 
@@ -62,7 +62,6 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
    - 写入前用 `git check-ignore -v <文件>` 检查 `ai-workflow.yaml`、入口文件和 `docs/` 是否被忽略；被忽略时团队拿不到配置，先告诉用户命中的规则，由用户决定改 `.gitignore` 还是换位置，不擅自修改。
 4. 写完运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root . --check-config`：解析错误（退出码 2）或路径不存在必须修正后再交付。
 5. **更新模式**（已有 `ai-workflow.yaml`）：逐项对比，只展示有变化的键；保留用户手写的 `notes` 和注释，不整份覆盖。
-6. **迁移模式**（只有旧格式 Markdown 小节）：把小节里的每一项映射到对应键，展示「旧条目 | 新键 | 值」；规则类文字（不是路径、命令、名称的部分）留在原文档或移到 `docs/` 对应规范，不塞进 `notes`。确认后写入 `ai-workflow.yaml`，删除入口文件里的旧小节并换成一行指针。
 
 ## 4. 文档骨架（只补缺失的）
 

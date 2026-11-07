@@ -106,20 +106,15 @@ class LoadTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding='utf-8')
 
-    def test_yaml_file_wins_over_markdown_section(self):
-        self.write('ai-workflow.yaml', 'version: 1\ndocs:\n  product_root: yaml/product\n')
+    def test_old_markdown_section_is_ignored(self):
         self.write('AGENTS.md', '## 工作流配置\n\n- 产品文档根：`md/product/`\n')
+        self.assertEqual(workflow_config.load(self.root).source, '默认值')
+
+    def test_yaml_file_is_loaded(self):
+        self.write('ai-workflow.yaml', 'version: 1\ndocs:\n  product_root: yaml/product\n')
         config = workflow_config.load(self.root)
         self.assertEqual(config.source, 'ai-workflow.yaml')
         self.assertEqual(config.get('docs.product_root'), 'yaml/product')
-
-    def test_markdown_section_is_legacy_fallback(self):
-        self.write('AGENTS.md', '## 工作流配置\n\n- 产品文档根：`md/product/`\n'
-                                '- 工程规范：`eng/` 下的 coding\n')
-        config = workflow_config.load(self.root)
-        self.assertTrue(config.legacy)
-        self.assertEqual(config.get('docs.product_root'), 'md/product')
-        self.assertEqual(config.get('docs.dev_docs'), 'eng')
 
     def test_no_config_is_empty(self):
         config = workflow_config.load(self.root)

@@ -84,22 +84,8 @@ class LinkTests(ProjectTestCase):
 
 
 class ConfigTests(ProjectTestCase):
-    CONFIG = ('# 项目\n\n## 工作流配置（ai-dev-workflow）\n\n'
-              '- 产品文档根：`product/`（项目首页：`product/首页.md`）\n'
-              '- 任务卡目录 / 总览：`product/cards/` / `product/cards/总览.md`\n'
-              '- 工程规范：`eng/` 下的 coding\n\n## 其他\n\n- 产品文档根：`wrong/`\n')
-
     YAML = ('version: 1\ndocs:\n  product_root: product\n  cards_dir: product/cards\n'
             '  dev_docs: eng\n')
-
-    def test_legacy_markdown_config_still_works_with_hint(self):
-        self.write('AGENTS.md', self.CONFIG)
-        self.write('product/cards/x.md', '### DEMO-R01 示例\n')
-        code, output = self.run_main()
-        self.assertEqual(code, 1)
-        self.assertIn('路径来源：工作流配置（Markdown 旧格式）', output)
-        self.assertIn('建议运行 /workflow-core:init 迁移', output)
-        self.assertIn('DEMO-R01 缺少字段', output)
 
     def test_yaml_config_is_used(self):
         self.write('ai-workflow.yaml', self.YAML)
@@ -122,8 +108,15 @@ class ConfigTests(ProjectTestCase):
         self.assertEqual(code, 1)
         self.assertIn('路径不存在 docs.product_root: product', output)
 
+    def test_yaml_config_reports_card_errors(self):
+        self.write('ai-workflow.yaml', self.YAML)
+        self.write('product/cards/x.md', '### DEMO-R01 示例\n')
+        code, output = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn('DEMO-R01 缺少字段', output)
+
     def test_cli_overrides_config(self):
-        self.write('AGENTS.md', self.CONFIG)
+        self.write('ai-workflow.yaml', self.YAML)
         self.write('other/cards/x.md', COMPLETE)
         code, output = self.run_main('--cards-dir', 'other/cards')
         self.assertEqual(code, 0, output)

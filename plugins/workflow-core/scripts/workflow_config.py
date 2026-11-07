@@ -9,7 +9,7 @@
 不支持：行内 [] / {}、多行字符串 | >、锚点 & *、多文档 ---、制表符缩进。
 遇到不支持的写法抛出 ConfigError 并给出行号，不静默回退默认值。
 
-读取优先级：ai-workflow.yaml → AGENTS.md / CLAUDE.md 的「工作流配置」Markdown 小节（旧格式，仅取路径）→ 无配置。
+项目根没有 ai-workflow.yaml 时视为无配置，由调用方使用默认值。
 """
 from pathlib import Path
 import re
@@ -36,13 +36,6 @@ SCHEMA = {
     'api': {'tool': 'str', 'project': 'str', 'project_id_file': 'path'},
     'code_rules_doc': 'path',
     'notes': 'list',
-}
-
-# 旧格式 Markdown 小节的标签 → 新配置键，只用于兼容期读取路径。
-LEGACY_LABELS = {
-    '产品文档根': 'docs.product_root',
-    '任务卡目录': 'docs.cards_dir',
-    '工程规范': 'docs.dev_docs',
 }
 
 _KEY = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*):(?:\s+(.*))?$')
@@ -228,14 +221,13 @@ def validate(data):
 class Config:
     """已加载的项目配置。
 
-    参数 [data]：配置数据（嵌套 dict）；[source]：来源说明；[root]：项目根；[legacy]：是否来自旧格式。
+    参数 [data]：配置数据（嵌套 dict）；[source]：来源说明；[root]：项目根。
     """
 
-    def __init__(self, data, source, root, legacy=False):
+    def __init__(self, data, source, root):
         self.data = data
         self.source = source
         self.root = root
-        self.legacy = legacy
 
     def get(self, dotted, default=None):
         """按 “段.键” 读取配置值。
@@ -270,40 +262,12 @@ class Config:
         return missing
 
 
-def _read_legacy(root):
-    """从 AGENTS.md / CLAUDE.md 的「工作流配置」Markdown 小节读取路径（旧格式兼容）。
-
-    参数 [root]：项目根。
-    返回：{'docs': {...}} 形式的数据；没有小节或没取到值时返回空 dict。
-    """
-    for name in ('AGENTS.md', 'CLAUDE.md'):
-        path = root / name
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding='utf-8')
-        match = re.search(r'^##\s+工作流配置.*?$(.*?)(?=^##\s|\Z)', text, re.M | re.S)
-        if not match:
-            continue
-        docs = {}
-        for line in match.group(1).splitlines():
-            for label, dotted in LEGACY_LABELS.items():
-                key = dotted.split('.')[1]
-                if key in docs or not re.match(rf'^\s*-\s*{re.escape(label)}', line):
-                    continue
-                value = re.search(r'`([^`]+)`', line)
-                if value:
-                    docs[key] = value.group(1).strip().rstrip('/')
-        if docs:
-            return {'docs': docs}
-    return {}
-
-
 def load(root):
     """加载项目配置。
 
     参数 [root]：项目根目录（Path）。
-    返回：Config；来源依次为 ai-workflow.yaml、旧格式 Markdown 小节、默认值（空配置）。
-    ai-workflow.yaml 存在但无法解析或结构不符时抛出 ConfigError，不回退到其他来源。
+    返回：Config；没有 ai-workflow.yaml 时返回来源为“默认值”的空配置。
+    ai-workflow.yaml 存在但无法解析或结构不符时抛出 ConfigError，不回退默认值。
     """
     path = root / CONFIG_FILE
     if path.is_file():
@@ -315,7 +279,4 @@ def load(root):
         if errors:
             raise ConfigError('结构不符：' + '；'.join(errors), None, CONFIG_FILE)
         return Config(data, CONFIG_FILE, root)
-    legacy = _read_legacy(root)
-    if legacy:
-        return Config(legacy, '工作流配置（Markdown 旧格式）', root, legacy=True)
     return Config({}, '默认值', root)
