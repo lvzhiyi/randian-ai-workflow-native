@@ -24,7 +24,7 @@ description: 双轴代码评审（Spec + Standards）。标准档、完整档交
 
 ## 1. 确定评审范围
 
-1. 对比点：用户给了提交、分支、tag 或 `HEAD~n` 就用它；没给时用当前分支与基线分支的 merge-base，基线取「工作流配置」的“评审基线分支”，没配置时用远端默认分支（`git symbolic-ref refs/remotes/origin/HEAD`），仍取不到再问用户。
+1. 对比点：用户给了提交、分支、tag 或 `HEAD~n` 就用它；没给时用当前分支与基线分支的 merge-base，基线取「工作流配置」的 `review.base_branch`，没配置时用远端默认分支（`git symbolic-ref refs/remotes/origin/HEAD`），仍取不到再问用户。
 2. 先确认对比点存在（`git rev-parse <对比点>`）。
 3. 范围 = `git diff <对比点>...HEAD` 加上未提交的工作区改动（`git diff HEAD`）；记录提交列表 `git log <对比点>..HEAD --oneline`。
 4. 排除生成文件（规则由技术栈插件提供，如 Flutter 的 `*.g.dart`、`*.freezed.dart`）和锁文件以外的二进制资源。
@@ -34,7 +34,7 @@ description: 双轴代码评审（Spec + Standards）。标准档、完整档交
 
 1. 用户给出的 change、任务卡、Issue 或文件。
 2. 规格工具的变更（如 OpenSpec `openspec/changes/<id>/`）：按分支名、提交信息中的 change-id、任务卡“关联主规格与进行中变更”字段匹配；读 proposal、规格 delta、tasks，有 design 一并读。
-3. 任务卡子需求（目录取「工作流配置」）：读“验收”“当前实现、目标、范围与非目标”“待确认”字段。
+3. 任务卡子需求（目录取 `docs.cards_dir`）：读“验收”“当前实现、目标、范围与非目标”“待确认”字段。
 4. 交接快照中的“目标与验收”。
 5. 都没有时问用户一次；用户确认没有时 Spec 轴跳过，报告写“无规格，Spec 轴未执行”。
 
@@ -42,8 +42,9 @@ description: 双轴代码评审（Spec + Standards）。标准档、完整档交
 
 ## 3. 汇总 Standards 来源
 
-- 「工作流配置」中“工程规范”目录下的规范文件，以及 `AGENTS.md` / `CLAUDE.md` 中的项目约定（如注释要求、生成代码不手改、不用固定账号代替鉴权）。
+- `docs.dev_docs` 目录下的规范文件、`code_rules_doc`，以及 `AGENTS.md` / `CLAUDE.md` 中的项目约定（如注释要求、生成代码不手改、不用固定账号代替鉴权）。
 - 当前技术栈插件的评审清单（如 `stack-flutter` 的“评审清单”一节）。
+- 术语表 `docs.glossary`（配置了时）：新增的类型、枚举、变量和用户可见文案是否使用词条的“代码命名”和术语，是否用了“避免”中的说法。
 - [prompts.md](prompts.md) 里的坏味道基线。
 - 格式、静态分析等已由工具保证的项不再评审。
 

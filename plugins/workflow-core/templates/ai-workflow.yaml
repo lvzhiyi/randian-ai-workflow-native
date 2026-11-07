@@ -1,0 +1,63 @@
+# ai-dev-workflow 项目配置（放在项目根目录，提交进 git）
+# 推荐运行 /workflow-core:init 自动探测并生成；也可以手动复制后按实际填写。
+#
+# 格式：YAML 受限子集，由插件自带解析器读取（不依赖 PyYAML）
+#   - “键: 值”映射；值为空时，下一行缩进 2 格写子项
+#   - 字符串列表逐行写 “- 值”，不支持行内 [a, b] 和 {a: b}
+#   - 不支持多行字符串（| >）、锚点（& *）、多文档（---）、制表符缩进
+#   - 未确认的值写“待确认”，不适用写“无”，不要留示例值
+# 只放脚本和技能能直接取用的事实（路径、命令、枚举、名称）；规则和说明写在项目 docs/。
+# 写完运行：python3 <workflow-core>/scripts/check_docs.py --root . --check-config
+
+version: 1
+
+docs:
+  product_root: docs/product
+  home: docs/product/项目首页.md
+  requirements: docs/product/需求/需求说明.md
+  cards_dir: docs/product/任务
+  overview: docs/product/任务/版本任务总览.md
+  design_index: docs/product/设计/设计索引.md
+  dev_docs: docs/development
+  glossary: docs/product/术语表.md        # 项目术语表；没有时写“无”
+
+spec:
+  tool: openspec                           # openspec | none
+  dir: openspec
+
+handoff:
+  with_change: openspec/changes/{change_id}/handoff.md
+  default: docs/development/handoffs/{task_id}.md
+
+review:
+  base_branch: main                        # 功能分支实际合入的分支，如 develop 或 main
+
+verify:
+  docs: <文档检查命令>
+  light: <定向测试 + 静态分析命令>
+  standard: <完整检查命令>
+  full:                                    # 多条命令按顺序执行
+    - <完整检查命令>
+    - <默认平台构建命令>
+
+platforms:
+  default:                                 # 默认验证的平台
+    - android
+  on_request:                              # 仅用户明确要求时验证
+    - ios
+  excluded:                                # 不考虑的平台
+    - web
+
+design:
+  tool: pixso                              # pixso | figma | 无
+  source_doc: docs/development/ui.md       # 写明权威设计文件的文档
+
+api:
+  tool: apifox                             # apifox | 无
+  project: <接口平台项目名>
+  project_id_file: .apifox/settings.json
+
+code_rules_doc: docs/development/coding.md # 注释、命名、生成代码等代码产物要求所在文档
+
+notes:                                     # 只写本项目特有、换项目就不成立的简短约定
+  - <约定>

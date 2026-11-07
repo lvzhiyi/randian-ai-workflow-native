@@ -28,7 +28,7 @@ description: Flutter/Dart 项目的技术栈惯例。在 Flutter 项目里写代
 
 ## 默认检查脚本
 
-项目「工作流配置」写了验证命令（如 `python3 scripts/check.py full`）时用项目的；没有时用本插件自带的：
+项目「工作流配置」写了 `verify.*`（如 `python3 scripts/check.py full`）时用项目的；没有时用本插件自带的：
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/flutter_check.py"                    # 改动文件格式 + analyze + 全部测试

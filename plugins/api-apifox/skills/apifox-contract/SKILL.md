@@ -5,7 +5,7 @@ description: 以 Apifox 为接口契约来源时的做法。需要读取 Apifox 
 
 # Apifox 接口契约
 
-项目使用哪个 Apifox 项目由「工作流配置」给出（项目名、项目 ID 位置，如 `.apifox/settings.json`）。
+项目使用哪个 Apifox 项目由「工作流配置」给出：`api.project`（项目名）、`api.project_id_file`（项目 ID 所在文件，如 `.apifox/settings.json`）。
 
 ## 工具与接入
 

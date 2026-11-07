@@ -4,16 +4,19 @@
 检查两类内容：
 1. 文档本地链接与锚点：Agent 入口、工程规范、产品文档中的相对链接目标是否存在、锚点标题是否存在。
 2. 模块任务卡：子需求小节的必填字段，以及结构化「待确认」记录的五段格式。
+3. 术语表（配置了 docs.glossary 时）：每个词条有「定义」字段、词条不重名。
 
-路径默认从项目 AGENTS.md / CLAUDE.md 的「工作流配置」小节读取，命令行参数优先。
-用法：python3 check_docs.py [--root 项目根] [--product-root DIR] [--cards-dir DIR] [--dev-docs DIR]
-退出码：0 通过；1 检查未通过；2 执行受阻（如项目根或配置的目录不存在）。
+路径从项目配置读取（见 workflow_config.py：ai-workflow.yaml 优先，旧格式 Markdown 小节兼容），命令行参数优先。
+用法：python3 check_docs.py [--root 项目根] [--product-root DIR] [--cards-dir DIR] [--dev-docs DIR] [--check-config]
+退出码：0 通过；1 检查未通过；2 执行受阻（如项目根不存在、配置无法解析）。
 """
 import argparse
 from pathlib import Path
 import re
 import sys
 from urllib.parse import unquote
+
+from workflow_config import ConfigError, load as load_config
 
 # 子需求标题：### <模块>-R<编号> 标题，例如 ### AUTH-R01 学员选择登录方式
 DEFAULT_CARD_ID = r'[A-Z][A-Z0-9]*-R\d+'
@@ -29,56 +32,40 @@ CARD_REQUIRED = {
 # 结构化「待确认」记录（含全角竖线「｜」）必须包含的段落。
 PENDING_KEYS = ('影响：', '负责人：', '恢复条件：', '来源：')
 
-# 「工作流配置」中用到的键：键名 → 取值后的用途。
-CONFIG_KEYS = {
-    'product_root': '产品文档根',
-    'cards_dir': '任务卡目录',
-    'dev_docs': '工程规范',
-}
+def resolve_paths(root, args, config):
+    """合并命令行参数、项目配置和默认值，得到本次检查使用的目录。
 
-
-def read_workflow_config(root):
-    """从 AGENTS.md / CLAUDE.md 的「工作流配置」小节读取路径。
-
-    参数 [root]：项目根目录。
-    返回：{'product_root'|'cards_dir'|'dev_docs': 相对路径}，没有配置或没取到值的键不出现。
-    每个键取该行第一个反引号包裹的路径，例如「- 产品文档根：`docs/product/`」→ docs/product。
-    """
-    result = {}
-    for name in ('AGENTS.md', 'CLAUDE.md'):
-        path = root / name
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding='utf-8')
-        match = re.search(r'^##\s+工作流配置.*?$(.*?)(?=^##\s|\Z)', text, re.M | re.S)
-        if not match:
-            continue
-        for line in match.group(1).splitlines():
-            for key, label in CONFIG_KEYS.items():
-                if key in result or not re.match(rf'^\s*-\s*{re.escape(label)}', line):
-                    continue
-                value = re.search(r'`([^`]+)`', line)
-                if value:
-                    # 去掉尾部斜杠和占位写法，如 docs/development/ 下的 xxx → docs/development
-                    result[key] = value.group(1).strip().rstrip('/')
-        if result:
-            break
-    return result
-
-
-def resolve_paths(root, args):
-    """合并命令行参数、工作流配置和默认值，得到本次检查使用的目录。
-
-    参数 [root]：项目根目录；[args]：argparse 结果。
-    返回：(product_root, cards_dir, dev_docs, 来源说明)，前三项为绝对 Path。
+    参数 [root]：项目根目录；[args]：argparse 结果；[config]：workflow_config.Config。
+    返回：(product_root, cards_dir, dev_docs)，均为绝对 Path。
     默认值：产品文档根 docs/product，任务卡目录 <产品文档根>/任务，工程规范 docs/development。
     """
-    config = read_workflow_config(root)
-    product = args.product_root or config.get('product_root') or 'docs/product'
-    cards = args.cards_dir or config.get('cards_dir') or f'{product}/任务'
-    dev = args.dev_docs or config.get('dev_docs') or 'docs/development'
-    source = '工作流配置' if config else '默认值'
-    return root / product, root / cards, root / dev, source
+    product = args.product_root or config.get('docs.product_root') or 'docs/product'
+    cards = args.cards_dir or config.get('docs.cards_dir') or f'{product}/任务'
+    dev = args.dev_docs or config.get('docs.dev_docs') or 'docs/development'
+    return root / product, root / cards, root / dev
+
+
+def check_glossary(root, path):
+    """检查术语表：每个三级标题是一个词条，必须有「- 定义：」字段，词条不重名。
+
+    参数 [root]：项目根，用于输出相对路径；[path]：术语表文件。
+    返回：错误描述列表。
+    """
+    errors = []
+    content = path.read_text(encoding='utf-8')
+    rel = path.relative_to(root)
+    entries = list(re.finditer(r'^###\s+(.+?)\s*$', content, re.M))
+    seen = set()
+    for index, match in enumerate(entries):
+        term = match.group(1)
+        end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
+        section = re.split(r'^## ', content[match.end():end], maxsplit=1, flags=re.M)[0]
+        if term in seen:
+            errors.append(f'{rel}: 词条重名「{term}」')
+        seen.add(term)
+        if not re.search(r'^- 定义[：:]\s*\S', section, re.M):
+            errors.append(f'{rel}: 词条「{term}」缺少「定义」')
+    return errors
 
 
 def heading_slugs(text):
@@ -178,15 +165,25 @@ def main(argv=None):
     parser.add_argument('--dev-docs', help='工程规范目录，覆盖工作流配置')
     parser.add_argument('--card-id', default=DEFAULT_CARD_ID, help='子需求编号正则')
     parser.add_argument('--skip-cards', action='store_true', help='只检查链接，不检查任务卡')
+    parser.add_argument('--check-config', action='store_true',
+                        help='额外检查配置里的路径是否存在')
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve()
     if not root.is_dir():
         print(f'[docs] status=BLOCKED reason=项目根不存在 {root}', flush=True)
         return 2
-    product_root, cards_dir, dev_docs, source = resolve_paths(root, args)
-    print(f'[docs] 路径来源：{source}；产品文档根={product_root.relative_to(root)}，'
+    try:
+        config = load_config(root)
+    except ConfigError as error:
+        print(f'[docs] status=BLOCKED reason=配置无法读取 {error}', flush=True)
+        return 2
+    product_root, cards_dir, dev_docs = resolve_paths(root, args, config)
+    print(f'[docs] 路径来源：{config.source}；产品文档根={product_root.relative_to(root)}，'
           f'任务卡={cards_dir.relative_to(root)}，工程规范={dev_docs.relative_to(root)}', flush=True)
+    if config.legacy:
+        print('[docs] 提示：配置仍在 Markdown 小节，建议运行 /workflow-core:init 迁移到 ai-workflow.yaml',
+              flush=True)
 
     paths = collect_docs(root, product_root, dev_docs)
     link_errors = check_links(root, paths)
@@ -197,12 +194,22 @@ def main(argv=None):
         else:
             print(f'[cards] 任务卡目录不存在，跳过：{cards_dir.relative_to(root)}', flush=True)
 
-    for error in link_errors + card_errors:
+    glossary_errors = []
+    glossary = config.get('docs.glossary')
+    if glossary and glossary not in ('待确认', '无') and (root / glossary).is_file():
+        glossary_errors = check_glossary(root, root / glossary)
+        print(f'[glossary] {len(glossary_errors)} 个错误', flush=True)
+    config_errors = []
+    if args.check_config:
+        config_errors = [f'{config.source}: 路径不存在 {item}' for item in config.missing_paths()]
+        print(f'[config] {len(config_errors)} 个错误', flush=True)
+
+    for error in link_errors + card_errors + glossary_errors + config_errors:
         print(error, file=sys.stderr)
     print(f'[links] {len(paths)} 个文件，{len(link_errors)} 个错误', flush=True)
     if not args.skip_cards:
         print(f'[cards] {len(card_errors)} 个错误', flush=True)
-    failed = bool(link_errors or card_errors)
+    failed = bool(link_errors or card_errors or glossary_errors or config_errors)
     print(f'[docs] status={"CHECK_FAILED" if failed else "PASS"}', flush=True)
     return int(failed)
 

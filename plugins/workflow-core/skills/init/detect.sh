@@ -102,8 +102,9 @@ has .git/hooks/pre-commit && say "git_hook" ".git/hooks/pre-commit"
 for f in AGENTS.md CLAUDE.md .claude/settings.json; do has "$f" && say "agent_file" "$f"; done
 cfg=-
 for f in AGENTS.md CLAUDE.md; do
-  has "$f" && grep -q '工作流配置' "$f" && cfg="$f"
+  has "$f" && grep -q '工作流配置' "$f" && cfg="$f（旧格式 Markdown 小节）"
 done
+has ai-workflow.yaml && cfg="ai-workflow.yaml"
 say "existing_workflow_config" "$cfg"
 if has .claude/settings.json; then
   say "enabled_plugins" "$(grep -oE '"[a-z0-9-]+@[a-z0-9-]+"' .claude/settings.json | tr -d '"' | tr '\n' ' ')"

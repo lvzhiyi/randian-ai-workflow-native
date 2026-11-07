@@ -5,12 +5,12 @@ description: AI 协作开发工作流总入口。开始任何开发任务（需�
 
 # 开发工作流总入口
 
-本插件只定义**技术栈无关**的流程。技术栈命令、设计工具、接口工具由对应插件（`stack-*`、`design-*`、`api-*`）提供；项目特有的路径、命令和约定写在项目的「工作流配置」中，用 `/workflow-core:init` 自动生成（字段见 `${CLAUDE_PLUGIN_ROOT}/templates/project-config.md`）。
+本插件只定义**技术栈无关**的流程。技术栈命令、设计工具、接口工具由对应插件（`stack-*`、`design-*`、`api-*`）提供；项目特有的路径、命令和约定写在项目根目录的「工作流配置」`ai-workflow.yaml` 中，用 `/workflow-core:init` 自动生成（字段见 `${CLAUDE_PLUGIN_ROOT}/templates/ai-workflow.yaml`）。
 
 ## 规则优先级
 
 1. 用户本次明确指令
-2. 项目 `AGENTS.md` / `CLAUDE.md` 与「工作流配置」、项目 `docs/` 规范
+2. 项目 `AGENTS.md` / `CLAUDE.md`、「工作流配置」`ai-workflow.yaml`、项目 `docs/` 规范
 3. 技术栈 / 设计 / 接口插件的惯例
 4. 本插件的通用流程
 5. 其他技能（如 Superpowers）的通用建议
@@ -19,7 +19,10 @@ description: AI 协作开发工作流总入口。开始任何开发任务（需�
 
 ## 先读项目配置
 
-开工先在项目 `AGENTS.md` / `CLAUDE.md` 中找「工作流配置」小节，取得：产品文档根、规格工具、交接目录、各档验证命令、默认验证平台、设计工具、接口工具。
+开工先读项目根目录的 `ai-workflow.yaml`，取得：文档路径（`docs.*`，含术语表 `docs.glossary`）、规格工具（`spec.*`）、交接目录（`handoff.*`）、评审基线（`review.base_branch`）、各档验证命令（`verify.*`）、验证平台（`platforms.*`）、设计与接口工具（`design.*`、`api.*`）。下文写成 `verify.standard` 这类键名时，都指这个文件里的值。
+
+- 只有旧格式（`AGENTS.md` / `CLAUDE.md` 里的「工作流配置」Markdown 小节）：照常读取，交付时提示运行 `/workflow-core:init` 迁移。
+- 配置了术语表时，沟通、文档和代码命名使用表里的词；遇到表里没有、含糊或一词多义的业务词，在交付“剩余”中提议新增词条，由用户确认后再写入。
 
 - 找不到配置：本次按默认值推进（无规格工具、交接写会话、验证命令从项目脚本和 README 推断），并在交付时提示用户运行 `/workflow-core:init` 生成配置；不在当前任务中途自行写入配置。
 - 配置引用的文件不存在：记录为缺项，不编造路径。

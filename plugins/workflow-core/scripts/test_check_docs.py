@@ -6,6 +6,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent))
 spec = importlib.util.spec_from_file_location('check_docs', Path(__file__).with_name('check_docs.py'))
 check_docs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check_docs)
@@ -86,18 +89,38 @@ class ConfigTests(ProjectTestCase):
               '- 任务卡目录 / 总览：`product/cards/` / `product/cards/总览.md`\n'
               '- 工程规范：`eng/` 下的 coding\n\n## 其他\n\n- 产品文档根：`wrong/`\n')
 
-    def test_reads_paths_from_workflow_config(self):
-        self.write('AGENTS.md', self.CONFIG)
-        self.assertEqual(check_docs.read_workflow_config(self.root),
-                         {'product_root': 'product', 'cards_dir': 'product/cards', 'dev_docs': 'eng'})
+    YAML = ('version: 1\ndocs:\n  product_root: product\n  cards_dir: product/cards\n'
+            '  dev_docs: eng\n')
 
-    def test_main_uses_config_and_reports_card_errors(self):
+    def test_legacy_markdown_config_still_works_with_hint(self):
         self.write('AGENTS.md', self.CONFIG)
         self.write('product/cards/x.md', '### DEMO-R01 示例\n')
         code, output = self.run_main()
         self.assertEqual(code, 1)
-        self.assertIn('路径来源：工作流配置', output)
+        self.assertIn('路径来源：工作流配置（Markdown 旧格式）', output)
+        self.assertIn('建议运行 /workflow-core:init 迁移', output)
         self.assertIn('DEMO-R01 缺少字段', output)
+
+    def test_yaml_config_is_used(self):
+        self.write('ai-workflow.yaml', self.YAML)
+        self.write('product/cards/x.md', COMPLETE)
+        code, output = self.run_main()
+        self.assertEqual(code, 0, output)
+        self.assertIn('路径来源：ai-workflow.yaml', output)
+        self.assertIn('任务卡=product/cards', output)
+
+    def test_invalid_yaml_is_blocked_not_defaulted(self):
+        self.write('ai-workflow.yaml', 'version: 1\ndocs: [product]\n')
+        code, output = self.run_main()
+        self.assertEqual(code, 2)
+        self.assertIn('status=BLOCKED', output)
+        self.assertIn('ai-workflow.yaml:2', output)
+
+    def test_check_config_reports_missing_paths(self):
+        self.write('ai-workflow.yaml', self.YAML)
+        code, output = self.run_main('--check-config')
+        self.assertEqual(code, 1)
+        self.assertIn('路径不存在 docs.product_root: product', output)
 
     def test_cli_overrides_config(self):
         self.write('AGENTS.md', self.CONFIG)
@@ -117,6 +140,17 @@ class ConfigTests(ProjectTestCase):
             code = check_docs.main(['--root', str(self.root / 'nope')])
         self.assertEqual(code, 2)
         self.assertIn('status=BLOCKED', out.getvalue())
+
+
+class GlossaryTests(ProjectTestCase):
+    def test_glossary_entries_need_definition_and_unique_names(self):
+        self.write('ai-workflow.yaml', 'version: 1\ndocs:\n  glossary: docs/product/术语表.md\n')
+        self.write('docs/product/术语表.md', '# 术语表\n\n### 模块卡\n\n- 定义：一个模块的产品任务卡。\n\n'
+                                           '### 子需求\n\n- 避免：需求点\n\n### 模块卡\n\n- 定义：重复\n')
+        code, output = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn('词条「子需求」缺少「定义」', output)
+        self.assertIn('词条重名「模块卡」', output)
 
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 ```mermaid
 flowchart TB
     subgraph PROJ["项目仓库（项目特有）"]
-        P1["AGENTS.md / CLAUDE.md<br/>工作流配置"]
+        P1["ai-workflow.yaml<br/>工作流配置"]
         P2["docs/：架构、UI、业务规则<br/>产品文档、设计索引"]
     end
     subgraph DIM["维度插件（按项目组合）"]
@@ -50,7 +50,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    INIT["接入（每个项目一次）<br/>init → 工作流配置"] -.-> T
+    INIT["接入（每个项目一次）<br/>init → ai-workflow.yaml"] -.-> T
     IN([用户需求 / PRD / Bug]) --> T{"0 分档<br/>tiering"}
     T -->|轻量| K
     T -->|标准| K
@@ -91,7 +91,7 @@ flowchart LR
     C -->|有| D["集中一次提问<br/>给推荐值"]
     C -->|无| E
     D --> E["展示 配置项 / 值 / 依据<br/>与小节草稿"]
-    E -->|确认| F["写入 AGENTS.md<br/>工作流配置"]
+    E -->|确认| F["写入 ai-workflow.yaml<br/>入口文件留指针"]
     F --> G["文档骨架：映射已有文档<br/>列清单确认后只补缺失的"]
     G --> H["可选：.claude/settings.json<br/>团队安装提示"]
 ```
@@ -166,7 +166,7 @@ flowchart TD
 - **Spec**：对照规格变更和任务卡验收，找缺失、范围蔓延、实现可疑、验收场景缺测试、规格来源不一致。
 - **Standards**：对照项目 `docs/` 规范、技术栈插件的“评审清单”和坏味道基线，找规范违反。
 
-严重度按后果分为阻塞 / 应修 / 建议；有未解决的阻塞时交付不能写“可评审”。只报告、不改代码，范围默认是当前分支相对「工作流配置」“评审基线分支”的 merge-base 加工作区改动。标准档交付前跑一次；完整档每段跑一次、结束后对整个分支再跑一次。
+严重度按后果分为阻塞 / 应修 / 建议；有未解决的阻塞时交付不能写“可评审”。只报告、不改代码，范围默认是当前分支相对 `review.base_branch` 的 merge-base 加工作区改动。标准档交付前跑一次；完整档每段跑一次、结束后对整个分支再跑一次。
 
 ### 6 交付 · `deliver`
 
@@ -262,7 +262,7 @@ claude plugin marketplace add flutter/agent-plugins
 /workflow-core:init
 ```
 
-它会只读扫描项目（技术栈、OpenSpec、`.apifox/`、设计链接、`docs/` 结构、检查脚本与 CI），只就识别不了的项提问（如默认验证平台、多个候选设计文件），展示「配置项 | 值 | 依据」后经你确认写入 `AGENTS.md` 的「工作流配置」小节，并可按需生成 `.claude/settings.json` 的插件提示。
+它会只读扫描项目（技术栈、OpenSpec、`.apifox/`、设计链接、`docs/` 结构、检查脚本与 CI），只就识别不了的项提问（如默认验证平台、多个候选设计文件），展示「配置项 | 值 | 依据」后经你确认写入项目根目录的 `ai-workflow.yaml`（入口文件只留一行指针），并可按需生成 `.claude/settings.json` 的插件提示。
 
 接着补齐流程需要的文档骨架（已有同类文档的只做映射，不新建；已有文件一律不覆盖）。
 
@@ -275,6 +275,7 @@ flowchart LR
         R["product/需求/需求说明.md"]
         O["product/任务/版本任务总览.md"]
         DI["product/设计/设计索引.md<br/>（有设计工具）"]
+        GL["product/术语表.md<br/>（只建骨架）"]
         E["development/coding · architecture · testing<br/>ui（有界面）· api-integration（有接口）"]
     end
     subgraph LATER["后续阶段按需生成"]
@@ -293,11 +294,16 @@ flowchart LR
 | 需求说明 | 业务规则、待确认问题 | `prd-breakdown`、`kickoff` |
 | 版本任务总览 / 模块卡 | 模块优先级 / 子需求状态与验收 | `prd-breakdown`、`check_docs.py` |
 | 设计索引 | 设计文件、节点映射、主稿确认 | `prd-breakdown`、`design-*` |
+| 术语表 | 已确认的业务术语、避免用词、代码命名 | `prd-breakdown`、`review`、`check_docs.py` |
 | coding / architecture / ui / api-integration / testing | 项目工程约定与检查命令 | `kickoff`、`implement`、`verify`、`api-contract` |
 
 模板在 [`templates/docs/`](plugins/workflow-core/templates/docs/)。init 用探测到的事实填写（如 `testing.md` 的真实命令、`architecture.md` 按现有目录推断的分层并标「待确认」），不留空壳。
 
-这份配置和文档**按项目写一次、提交进 git**，团队成员和其他 Agent 共用，不需要每人手写。项目约定变化时再次运行 `init` 会进入更新模式，只改有变化的行。字段说明见 [`templates/project-config.md`](plugins/workflow-core/templates/project-config.md)。
+这份配置和文档**按项目写一次、提交进 git**，团队成员和其他 Agent 共用，不需要每人手写。项目约定变化时再次运行 `init` 会进入更新模式，只改有变化的键；配置还是旧格式 Markdown 小节时进入迁移模式。字段和格式说明见 [`templates/ai-workflow.yaml`](plugins/workflow-core/templates/ai-workflow.yaml)。
+
+**配置格式**：YAML 受限子集（两层映射、逐行字符串列表、`#` 注释），由插件自带的 [`workflow_config.py`](plugins/workflow-core/scripts/workflow_config.py) 读取，不依赖 PyYAML，Python 3.8+ 标准库即可。写了子集以外的语法或未知键时报“执行受阻”并给出行号，不会静默回退默认值；`check_docs.py --check-config` 额外检查配置里的路径是否存在。旧格式（AGENTS.md 里的「工作流配置」小节）在兼容期内仍可读取路径，并提示迁移。
+
+**术语表**：`docs.glossary` 指向项目术语表（默认 `docs/product/术语表.md`），不放进配置。`init` 只建骨架；`prd-breakdown` 遇到含糊词提议入表，`review` 检查命名是否符合词条，用户确认后才写入。
 
 ### 2. 让团队成员打开项目就收到安装提示
 
@@ -394,7 +400,8 @@ ai-dev-workflow/
 | `workflow-core/skills/init/detect.sh` | 只读探测项目技术栈、规格/设计/接口工具、文档结构、检查命令 | `init` 技能 |
 | `stack-flutter/scripts/flutter_check.py` | 改动文件格式检查 + `flutter analyze` + 测试；项目没配置检查命令时的默认检查 | `verify`、`stack-flutter:flutter` 技能 |
 | `stack-flutter/scripts/stop_analyze.py` | Stop 钩子：结束回合前对改动的 Dart 文件跑 `dart analyze`，有 error 让 AI 先修 | `stack-flutter/hooks/hooks.json` |
-| `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式；路径读「工作流配置」，可用参数覆盖 | `prd-breakdown`、`verify` 技能；项目 CI |
+| `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式、术语表词条；路径读 `ai-workflow.yaml`，可用参数覆盖；`--check-config` 检查配置路径 |
+| `workflow-core/scripts/workflow_config.py` | 解析与校验 `ai-workflow.yaml`（YAML 受限子集）、兼容旧格式 Markdown 小节 | `prd-breakdown`、`verify` 技能；项目 CI |
 
 **插件不依赖项目脚本**：技能只调用插件自带的脚本，项目里没有 `check.py` 之类的入口也能正常工作；项目有自己的检查入口时，写进「工作流配置」后优先使用项目的。
 
@@ -414,7 +421,7 @@ flowchart LR
 - uses: actions/checkout@v4
   with:
     repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.6.0
+    ref: workflow-core--v0.7.0
     path: .ai-workflow
 - run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
 ```

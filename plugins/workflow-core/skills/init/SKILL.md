@@ -1,11 +1,11 @@
 ---
 name: init
-description: 为项目生成或更新「工作流配置」，并按需生成文档骨架（项目首页、需求说明、任务总览、设计索引、工程规范）。项目第一次接入 ai-dev-workflow 插件、AGENTS.md/CLAUDE.md 里还没有「工作流配置」小节、用户说“初始化工作流 / 接入插件 / 生成工作流配置”，或项目的技术栈、设计工具、接口工具、验证命令发生变化需要刷新配置时使用。
+description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，并按需生成文档骨架（项目首页、需求说明、任务总览、设计索引、术语表、工程规范）。项目第一次接入 ai-dev-workflow 插件、项目根还没有 ai-workflow.yaml、配置仍是 AGENTS.md/CLAUDE.md 里的旧格式 Markdown 小节需要迁移、用户说“初始化工作流 / 接入插件 / 生成工作流配置”，或项目的技术栈、设计工具、接口工具、验证命令发生变化需要刷新配置时使用。
 ---
 
 # 初始化项目工作流配置与文档骨架
 
-目标：自动识别项目情况，**只问识别不了的**，生成「工作流配置」小节写入项目 Agent 入口文件，并补齐流程需要的文档骨架。配置和文档按项目写一次、提交进 git，团队共用。
+目标：自动识别项目情况，**只问识别不了的**，生成项目根目录的「工作流配置」`ai-workflow.yaml`，在 Agent 入口文件留一行指针，并补齐流程需要的文档骨架。配置和文档按项目写一次、提交进 git，团队共用。
 
 流程说明（三档、拆解、交接、交付等）由插件技能承载，**不**在项目里生成 `ai-workflow.md` 一类的流程文档；项目里只放项目事实。
 
@@ -31,7 +31,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 | 验证命令 | `check_entry`、`make_targets`、`package_scripts`、`ci` | 测试/验证规范、`scripts/` 说明、CI 文件中的实际命令 |
 | 默认验证平台 | 测试/验证规范中的约定 | — |
 | 代码产物要求 | 代码规范中的注释、生成代码规则 | — |
-| 已有配置 | `existing_workflow_config` | 该小节全文（进入更新模式） |
+| 已有配置 | `existing_workflow_config` | `ai-workflow.yaml` 全文（进入更新模式），或旧格式 Markdown 小节全文（进入迁移模式） |
 
 **取值规则**：
 
@@ -54,15 +54,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 
 ## 3. 展示草稿，确认后写入
 
-1. 按 `${CLAUDE_PLUGIN_ROOT}/templates/project-config.md` 的字段生成小节，不适用的写“无”。
-2. 先展示「配置项 | 值 | 依据」表和将要写入的小节全文，等用户确认。
-3. 写入位置：
-   - 已有 `AGENTS.md`：追加到文件末尾，或放在用户指定的位置。
-   - 只有 `CLAUDE.md`：写入 `CLAUDE.md`。
+1. 按 `${CLAUDE_PLUGIN_ROOT}/templates/ai-workflow.yaml` 的结构生成配置：保留模板头部的格式说明注释，删掉示例值，不适用的写“无”，未确认的写“待确认”。只写脚本和技能能直接取用的事实；规则类说明（如“iOS 仅在明确要求时验证”的理由）留在项目 `docs/`，不写进配置。
+2. 先展示「配置项 | 值 | 依据」表和将要写入的文件全文，等用户确认。
+3. 写入项目根目录 `ai-workflow.yaml`，然后在 Agent 入口文件加一行指针（如“工作流配置：根目录 `ai-workflow.yaml`”）：
+   - 已有 `AGENTS.md` 写 `AGENTS.md`；只有 `CLAUDE.md` 写 `CLAUDE.md`；`CLAUDE.md` 只是 `@AGENTS.md` 引用时写 `AGENTS.md`。
    - 两者都没有：新建 `AGENTS.md`，并询问是否同时新建只含 `@AGENTS.md` 的 `CLAUDE.md`。
-   - `CLAUDE.md` 只是 `@AGENTS.md` 引用时，写进 `AGENTS.md`。
-   - 写入前用 `git check-ignore -v <文件>` 检查目标文件和 `docs/` 是否被忽略；被忽略时团队拿不到配置，先告诉用户命中的规则，由用户决定改 `.gitignore` 还是换写入位置，不擅自修改。
-4. **更新模式**（已有配置小节）：逐项对比，只展示有变化的行；保留用户手写的“项目额外约定”等内容，不整段覆盖。
+   - 写入前用 `git check-ignore -v <文件>` 检查 `ai-workflow.yaml`、入口文件和 `docs/` 是否被忽略；被忽略时团队拿不到配置，先告诉用户命中的规则，由用户决定改 `.gitignore` 还是换位置，不擅自修改。
+4. 写完运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root . --check-config`：解析错误（退出码 2）或路径不存在必须修正后再交付。
+5. **更新模式**（已有 `ai-workflow.yaml`）：逐项对比，只展示有变化的键；保留用户手写的 `notes` 和注释，不整份覆盖。
+6. **迁移模式**（只有旧格式 Markdown 小节）：把小节里的每一项映射到对应键，展示「旧条目 | 新键 | 值」；规则类文字（不是路径、命令、名称的部分）留在原文档或移到 `docs/` 对应规范，不塞进 `notes`。确认后写入 `ai-workflow.yaml`，删除入口文件里的旧小节并换成一行指针。
 
 ## 4. 文档骨架（只补缺失的）
 
@@ -73,6 +73,7 @@ docs/product/项目首页.md                 init
 docs/product/需求/需求说明.md            init
 docs/product/任务/版本任务总览.md        init
 docs/product/设计/设计索引.md            init，有设计工具时
+docs/product/术语表.md                  init，只建骨架，不预填词条
 docs/development/coding.md              init
 docs/development/architecture.md        init
 docs/development/testing.md             init
@@ -82,7 +83,7 @@ docs/product/任务/<模块>.md              prd-breakdown 首次拆出该模块
 docs/development/handoffs/<task-id>.md  handoff 首次跨会话交接时
 ```
 
-1. **先映射已有文档**：项目已有承担同一角色的文档（如 `doc/测试说明.md`、`wiki/架构.md`），不新建，把它的路径写进「工作流配置」对应项；文件名不同但职责相同也算已有。
+1. **先映射已有文档**：项目已有承担同一角色的文档（如 `doc/测试说明.md`、`wiki/架构.md`），不新建，把它的路径写进 `ai-workflow.yaml` 对应键；文件名不同但职责相同也算已有。
 2. **列清单再写**：展示「文档 | 状态（新建 / 已有·映射到 X / 不适用及原因）」，确认后再创建。只创建缺失的文件，**已有文件一律不覆盖、不改写**。
 3. **填事实，不留空壳**：用第 1 步探测到的事实替换 `{{...}}` 占位符——
    - `testing.md`：真实存在的检查命令、CI 命令、默认验证平台，与配置一致；
@@ -91,8 +92,9 @@ docs/development/handoffs/<task-id>.md  handoff 首次跨会话交接时
    - `设计索引.md`、`api-integration.md`：设计工具与权威文件、接口工具与项目；
    - `项目首页.md`：项目名、一句话说明，并**只保留已生成或已映射文档的链接**。
    确实不知道的写「待确认」；删除模板里的 `<!-- 说明 -->` 注释。
-4. 生成后运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root .`，链接必须全部通过。
-5. 「工作流配置」里的文档路径与实际生成/映射的位置保持一致（默认设计索引为 `docs/product/设计/设计索引.md`）。
+4. 术语表只建骨架：可以从 PRD、任务卡、规格和代码中提取候选词列给用户，**只有用户确认了定义的词才写入**，不替业务方编造定义。
+5. 生成后运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root . --check-config`，链接和配置路径必须全部通过。
+6. `ai-workflow.yaml` 里的文档路径与实际生成/映射的位置保持一致（默认设计索引为 `docs/product/设计/设计索引.md`）。
 
 ## 5. 插件建议（可选）
 
