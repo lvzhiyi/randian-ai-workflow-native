@@ -77,6 +77,19 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/flutter_check.py" --all              # �
 - `build_runner`、`freezed`、`json_serializable`、资源常量等生成文件不手改：改生成源后重新生成并审查 diff。
 - 生成前先看扫描范围；生成后只提交本次相关的生成结果。
 
+## 评审清单（供 `workflow-core:review` 的 Standards 轴使用）
+
+评审时排除生成文件：`*.g.dart`、`*.freezed.dart`、`*.gr.dart`、`*.config.dart`、`*.mocks.dart`，以及项目配置声明的生成目录。以下每条违反均按“应修”起报，标注“阻塞”的除外：
+
+- **异步与生命周期**：`await` 之后使用 `BuildContext` 前检查 `mounted`（State 内用 `mounted`，其他位置用 `context.mounted`）；Bloc/Cubit 关闭后不再 `emit`；页面关闭后的异步返回不更新已释放的状态或登录态。
+- **资源释放**：`TextEditingController`、`FocusNode`、`AnimationController`、`ScrollController`、`StreamSubscription`、`Timer` 由创建者在 `dispose` / `close` 中释放。
+- **重复提交**：提交类按钮在请求进行中禁用或忽略重复触发。
+- **分层**：视图（Widget）内不直接发请求、读写存储或实现鉴权逻辑。
+- **敏感数据（阻塞）**：令牌、密码等不写入 SharedPreferences、日志、`print`、异常消息或测试 fixture；不硬编码生产地址或真实凭据。
+- **生成代码（阻塞）**：生成文件只能由生成源重新生成，diff 中手改生成文件时报告。
+- **依赖**：`pubspec.yaml` 依赖变化时 `pubspec.lock` 同步变化；不为套用示例升级无关依赖。
+- **测试写法**：测试调用真实 repository/controller，只用 fake 替换外部依赖；不 mock 被测对象本身；不用 `sleep` / 固定延时等待异步结果（用 `pump` / `pumpAndSettle` 或 fake 时钟）。
+
 ## 常见坑
 
 - **git 钩子里跑 Flutter 版本识别错误**：钩子环境带着 `GIT_DIR`，Flutter 会读到项目仓库的 git 元数据，SDK 版本显示成 `0.0.0-unknown`，导致 `pub get` 版本约束失败。在钩子脚本里先 `unset GIT_DIR GIT_INDEX_FILE` 再调用 `flutter`。

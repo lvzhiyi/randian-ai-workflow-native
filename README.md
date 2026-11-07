@@ -19,8 +19,8 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 
 | 插件 | 维度 | 内容 |
 | --- | --- | --- |
-| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、文档规范检查脚本、总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、统一交付、中断交接 |
-| `stack-flutter` | 技术栈 | 版本核对、默认检查脚本、Stop 钩子兜底静态分析、平台验证口径、生成代码、常见坑 |
+| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、文档规范检查脚本、总入口、三档分级、PRD 拆解、开工检查、分段实施、接口契约、第三方文档、验证与失败分类、双轴代码评审（`review`）、统一交付、中断交接 |
+| `stack-flutter` | 技术栈 | 版本核对、默认检查脚本、Stop 钩子兜底静态分析、平台验证口径、评审清单、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
 | `preset-flutter-pixso-apifox` | 组合包 | 依赖以上四个 + 官方 `context7`、`superpowers`、`dart-flutter`（Dart and Flutter），一次装齐 |
@@ -65,18 +65,20 @@ flowchart LR
     IM --> V["5 验证<br/>verify"]
     V -->|失败：本次回归| IM
     V -->|受阻| H["交接<br/>handoff"]
-    V -->|通过| CR["代码评审<br/>（规划中）"]
-    CR --> IT["集成测试<br/>（规划中）"]
-    IT --> DL["6 交付<br/>deliver"]
-    V -.当前直接.-> DL
+    V -->|通过：标准 / 完整| CR["5.5 评审<br/>review"]
+    V -->|通过：轻量| DL["6 交付<br/>deliver"]
+    CR -->|有阻塞| IM
+    CR -->|无阻塞| DL
+    CR -.规划中.-> IT["集成测试<br/>（规划中）"]
+    IT -.-> DL
     H -.恢复.-> K
     DL --> OUT([结论 + 五项交付结果])
 
     classDef planned stroke-dasharray: 5 5,fill:#f6f6f6,color:#888;
-    class CR,IT planned;
+    class IT planned;
 ```
 
-轻量任务通常走 0 → 4 → 5 → 6；只做需求整理的任务停在 1。中断交接（`handoff`）可以在任何阶段发生。
+轻量任务通常走 0 → 4 → 5 → 6，标准、完整档在交付前加 5.5 评审；只做需求整理的任务停在 1。中断交接（`handoff`）可以在任何阶段发生。
 
 ## 各阶段说明
 
@@ -156,6 +158,15 @@ flowchart TD
     Q -->|超范围| RT[重新分档]
     Q -->|两轮无新证据| HO[总结后交接]
 ```
+
+### 5.5 评审 · `review`
+
+对固定范围的 diff 同时启动两个干净上下文的子代理，分开报告、不合并排序：
+
+- **Spec**：对照规格变更和任务卡验收，找缺失、范围蔓延、实现可疑、验收场景缺测试、规格来源不一致。
+- **Standards**：对照项目 `docs/` 规范、技术栈插件的“评审清单”和坏味道基线，找规范违反。
+
+严重度按后果分为阻塞 / 应修 / 建议；有未解决的阻塞时交付不能写“可评审”。只报告、不改代码，范围默认是当前分支相对「工作流配置」“评审基线分支”的 merge-base 加工作区改动。标准档交付前跑一次；完整档每段跑一次、结束后对整个分支再跑一次。
 
 ### 6 交付 · `deliver`
 
@@ -320,6 +331,7 @@ flowchart LR
 | 不确定从哪开始 | `/workflow-core:workflow` |
 | 拿到一份 PRD | `/workflow-core:prd-breakdown` |
 | 判断档位 | `/workflow-core:tiering` |
+| 交付前评审改动 | `/workflow-core:review` |
 | 写最终交付 | `/workflow-core:deliver` |
 | 要换会话 / 接手任务 | `/workflow-core:handoff` |
 
@@ -402,7 +414,7 @@ flowchart LR
 - uses: actions/checkout@v4
   with:
     repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.3.0
+    ref: workflow-core--v0.6.0
     path: .ai-workflow
 - run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
 ```
@@ -434,7 +446,8 @@ python3 -m unittest discover -s plugins/stack-flutter/scripts -p 'test_*.py'
 
 | 阶段 | 计划 | 状态 |
 | --- | --- | --- |
-| 代码评审 | `workflow-core:code-review`：评审范围、严重度口径、与交付五项的衔接；可依赖官方 `code-review` 插件 | 规划中 |
+| 代码评审 | `workflow-core:review`：Spec + Standards 双轴评审，严重度口径与交付衔接 | 已实现（workflow-core 0.6.0） |
+| 评审测试有效性 | `review` 可选步骤：安全相关和 Bug 修复的新测试在父提交上应失败（临时 worktree 中验证） | 规划中，出现真实问题时再做 |
 | 集成测试 | `workflow-core:integration-test`：从任务卡验收场景生成测试用例 → 环境与数据准备 → 执行 → 结果回写卡片；Apifox 场景执行放 `api-apifox` | 规划中 |
 | 其他技术栈 | `stack-react`、`stack-vue` | 有对应项目时再建 |
 | 其他设计工具 | `design-figma`（官方 `figma` 插件可作依赖） | 有对应项目时再建 |

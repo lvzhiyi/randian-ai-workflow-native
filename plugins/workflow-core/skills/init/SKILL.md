@@ -27,6 +27,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 | 设计工具与权威文件 | `design_tool`、`design_link` | 设计索引或 UI 规范中写明“权威/当前”的那个文件 |
 | 产品文档、交接目录 | `dir`、`product_doc`、`dev_doc` | 项目首页 / 总览文件名；已有文档的实际位置 |
 | 是否有界面 / 后端接口 | `stack`、`flutter_platforms`、`api_tool` | 有前端或移动端视为有界面；有接口工具或网络层目录视为有后端接口 |
+| 评审基线分支 | 功能分支实际合入的分支（`git log --merges --format=%s origin/<候选> -10` 看合并目标），参考远端默认分支 `git symbolic-ref --short refs/remotes/origin/HEAD` | 两者不一致或都取不到时列为待问项 |
 | 验证命令 | `check_entry`、`make_targets`、`package_scripts`、`ci` | 测试/验证规范、`scripts/` 说明、CI 文件中的实际命令 |
 | 默认验证平台 | 测试/验证规范中的约定 | — |
 | 代码产物要求 | 代码规范中的注释、生成代码规则 | — |

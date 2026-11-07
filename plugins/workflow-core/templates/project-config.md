@@ -12,6 +12,7 @@ workflow-core 的各技能会到这里取路径和命令；不适用的项写“
 - 工程规范：`docs/development/` 下的 coding / architecture / ui / api-integration / testing
 - 规格工具：OpenSpec（`openspec/`）｜无
 - 交接目录：有变更时 `openspec/changes/<change-id>/handoff.md`；否则 `docs/development/handoffs/<task-id>.md`
+- 评审基线分支：`main`（`review` 默认对比的基线：功能分支实际合入的分支，如 `develop` 或 `main`）
 - 验证命令：
   - 文档：workflow-core 文档规范检查（`check_docs.py`，由技能调用）；项目另有文档检查时写出命令，如 `<命令>`
   - 轻量：`<定向测试 + 静态分析命令>`
