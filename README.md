@@ -199,7 +199,7 @@ flowchart TD
 
 状态口径：实施完成待验证 / 可评审 / 可合并 / 已上线 / 受阻，互不替代。
 
-### 横切 · `handoff`
+### 中断交接 · `handoff`
 
 ```mermaid
 flowchart LR
