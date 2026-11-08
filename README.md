@@ -35,9 +35,7 @@
 - [各阶段说明](#各阶段说明)
 - [安装](#安装)
 - [在项目中使用](#在项目中使用)
-- [开发与发布本仓库](#开发与发布本仓库)
 - [扩展：新增阶段、技术栈或工具](#扩展新增阶段技术栈或工具)
-- [路线图](#路线图)
 
 ## 插件一览
 
@@ -407,96 +405,6 @@ flowchart LR
 | `scripts/check.py docs` 的链接与任务卡检查 | `workflow-core/scripts/check_docs.py`；`check.py` 保留 `git diff --check` 与 `full` 的 Flutter 检查 |
 | `architecture.md`、`ui.md`、`coding.md` | 留在项目（项目特有） |
 
-## 开发与发布本仓库
-
-```text
-ai-dev-workflow/
-├── .claude-plugin/marketplace.json     # marketplace 清单 + 跨 marketplace 白名单
-└── plugins/
-    ├── workflow-core/
-    │   ├── .claude-plugin/plugin.json 和 .codex-plugin/plugin.json
-    │   ├── hooks/hooks.json 和 hooks/codex.json
-    │   ├── skills/<阶段>/SKILL.md       # 每个阶段一个技能
-    │   ├── skills/init/detect.sh        # init 用的只读项目探测脚本
-    │   ├── scripts/check_docs.py        # 文档规范检查（链接/锚点、任务卡字段、待确认格式）
-    │   └── templates/                   # 项目配置、交接、受阻、任务卡模板
-    ├── stack-flutter/
-    │   ├── scripts/flutter_check.py     # 默认检查：格式 + analyze + 测试
-    │   ├── scripts/stop_analyze.py      # Stop 钩子脚本
-    │   └── hooks/                       # 两个客户端各自的 Stop 钩子配置
-    ├── design-pixso/                    # 含 .mcp.json
-    ├── api-apifox/
-    └── preset-flutter-pixso-apifox/     # 只有 plugin.json 的 dependencies
-```
-
-- **边改边用**：Claude Code 本地 marketplace 修改后可执行 `/reload-plugins`，临时调试也可用 `claude --plugin-dir ./plugins/workflow-core`。Codex 本地插件修改后重新安装并打开新会话，钩子脚本变更后在 Hooks 中重新审核。
-- **校验**：提交前运行插件校验和脚本单测。
-
-  ```bash
-  for p in plugins/*/; do claude plugin validate "$p" --strict; done
-  ```
-
-- **发版**：确认可用后，在插件目录升级 `plugin.json` 的 `version`，然后执行：
-
-  ```bash
-  claude plugin tag --push
-  ```
-
-  tag 格式为 `<插件名>--v<版本>`，依赖方的版本约束（如 `^0.2`）按 tag 解析。`0.x` 表示仍在变动。
-
-## 插件自带脚本
-
-| 脚本 | 用途 | 调用方 |
-| --- | --- | --- |
-| `workflow-core/skills/init/detect.sh` | 只读探测项目技术栈、规格/设计/接口工具、文档结构、检查命令 | `init` 技能 |
-| `stack-flutter/scripts/flutter_check.py` | 改动文件格式检查 + `flutter analyze` + 测试；项目没配置检查命令时的默认检查 | `verify`、`stack-flutter:flutter` 技能 |
-| `stack-flutter/scripts/stop_analyze.py` | Stop 钩子：结束回合前对改动的 Dart 文件跑 `dart analyze`，有 error 让 AI 先修 | `stack-flutter/hooks/hooks.json` |
-| `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式、术语表词条；路径读 `ai-workflow.yaml`，可用参数覆盖；`--check-config` 检查配置路径 |
-| `workflow-core/scripts/trace_hook.py`、`trace_server.py` | 可选的执行轨迹：钩子把工具调用写入本机日志，本地页面实时展示；默认关闭 | `trace` 技能、`hooks/hooks.json` |
-| `workflow-core/scripts/workflow_metric.py` | 把评审、交付结论写成结构化度量（只存枚举、计数和规则名，默认开启；`off` 关闭），`stack-flutter` 的 Stop 钩子写入同一文件 | `review`、`deliver` 技能 |
-| `workflow-core/scripts/workflow_gate.py` | 触发兜底：接入项目的会话开始时说明工作流入口，代码改动后缺交付时在回合结束提醒。可在客户端数据目录的 `workflow-gate/` 下创建 `disabled` 文件关闭 | `hooks/hooks.json`、`hooks/codex.json` |
-| `workflow-core/scripts/metrics_report.py` | 汇总触发率、评审阻塞、拦截、待验证比例，生成规则命中表和删除候选（只读） | `metrics` 技能 |
-| `workflow-core/scripts/workflow_trace.py` | 从 Claude Code 会话记录事后生成单页轨迹 | 手动运行 |
-| `workflow-core/scripts/workflow_config.py` | 解析与校验 `ai-workflow.yaml`（YAML 受限子集） | `prd-breakdown`、`verify` 技能；项目 CI |
-
-**插件不依赖项目脚本**：技能只调用插件自带的脚本，项目里没有 `check.py` 之类的入口也能正常工作；项目有自己的检查入口时，写进「工作流配置」后优先使用项目的。
-
-**代码检查不会被漏掉**：分三层保证。
-
-```mermaid
-flowchart LR
-    R["规则层<br/>verify / deliver：改代码必须有<br/>格式 + 静态分析 + 相关测试"] --> C["命令层<br/>项目配置命令 →<br/>技术栈默认脚本"]
-    C --> H["强制层<br/>stack-* Stop 钩子：<br/>有 analyze error 不让结束"]
-```
-
-**哪些脚本放插件、哪些留项目**：只服务 AI 工作流、与具体项目无关、项目离开它照样能运行，三条都满足才放插件。构建、发布、代码生成、提交钩子、`flutter analyze/test` 这类项目运行要依赖的脚本留在项目里，否则没装插件的 CI 和同事就跑不了。
-
-**在 CI 中运行文档检查**：CI 里没有 Claude 插件，额外签出本仓库的固定 tag 运行同一份脚本，版本可复现：
-
-```yaml
-- uses: actions/checkout@v4
-  with:
-    repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.13.0
-    path: .ai-workflow
-- run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
-```
-
-本地手动运行（Python 3.8+，仅标准库）：
-
-```bash
-python3 ~/.claude/plugins/cache/ai-dev-workflow/workflow-core/<版本>/scripts/check_docs.py --root .
-```
-
-修改脚本后跑单测：
-
-```bash
-python3 -m unittest discover -s plugins/workflow-core/scripts -p 'test_check_docs.py'
-```
-
-```bash
-python3 -m unittest discover -s plugins/stack-flutter/scripts -p 'test_*.py'
-```
 
 ## 扩展：新增阶段、技术栈或工具
 
@@ -505,12 +413,3 @@ python3 -m unittest discover -s plugins/stack-flutter/scripts -p 'test_*.py'
 - **新增设计/接口工具**（如 `design-figma`）：MCP 配置放插件 `.mcp.json`，凭据用环境变量或 `userConfig` 的 `sensitive` 字段，不写进仓库。
 - **强制规则**：靠文字约束不可靠的，用插件 `hooks/hooks.json` 兜底，参考 `stack-flutter` 的 Stop 钩子。新技术栈插件（如 `stack-vue`）可以照此用 `tsc --noEmit` / `eslint` 实现同样的兜底。
 
-## 路线图
-
-| 阶段 | 计划 | 状态 |
-| --- | --- | --- |
-| 代码评审 | `workflow-core:review`：Spec + Standards 双轴评审，严重度口径与交付衔接 | 已实现（workflow-core 0.6.0） |
-| 评审测试有效性 | `review` 可选步骤：安全相关和 Bug 修复的新测试在父提交上应失败（临时 worktree 中验证） | 规划中，出现真实问题时再做 |
-| 集成测试 | `workflow-core:integration-test`：从任务卡验收场景生成测试用例 → 环境与数据准备 → 执行 → 结果回写卡片；Apifox 场景执行放 `api-apifox` | 规划中 |
-| 其他技术栈 | `stack-react`、`stack-vue` | 有对应项目时再建 |
-| 其他设计工具 | `design-figma`（官方 `figma` 插件可作依赖） | 有对应项目时再建 |
