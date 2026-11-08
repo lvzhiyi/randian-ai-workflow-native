@@ -338,6 +338,7 @@ flowchart LR
 | 拿到一份 PRD | `/workflow-core:prd-breakdown` |
 | 判断档位 | `/workflow-core:tiering` |
 | 交付前评审改动 | `/workflow-core:review` |
+| 查看流程度量报告 | `/workflow-core:metrics` |
 | 实时查看执行轨迹（可选，默认关闭） | `/workflow-core:trace on`，`off` 关闭 |
 | 写最终交付 | `/workflow-core:deliver` |
 | 要换会话 / 接手任务 | `/workflow-core:handoff` |
@@ -404,6 +405,7 @@ ai-dev-workflow/
 | `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式、术语表词条；路径读 `ai-workflow.yaml`，可用参数覆盖；`--check-config` 检查配置路径 |
 | `workflow-core/scripts/trace_hook.py`、`trace_server.py` | 可选的执行轨迹：钩子把工具调用写入本机日志，本地页面实时展示；默认关闭 | `trace` 技能、`hooks/hooks.json` |
 | `workflow-core/scripts/workflow_metric.py` | 把评审、交付结论写成结构化度量（只存枚举、计数和规则名，默认开启；`off` 关闭），`stack-flutter` 的 Stop 钩子写入同一文件 | `review`、`deliver` 技能 |
+| `workflow-core/scripts/metrics_report.py` | 汇总触发率、评审阻塞、拦截、待验证比例，生成规则命中表和删除候选（只读） | `metrics` 技能 |
 | `workflow-core/scripts/workflow_trace.py` | 从 Claude Code 会话记录事后生成单页轨迹 | 手动运行 |
 | `workflow-core/scripts/workflow_config.py` | 解析与校验 `ai-workflow.yaml`（YAML 受限子集） | `prd-breakdown`、`verify` 技能；项目 CI |
 
@@ -425,7 +427,7 @@ flowchart LR
 - uses: actions/checkout@v4
   with:
     repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.10.0
+    ref: workflow-core--v0.11.0
     path: .ai-workflow
 - run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
 ```

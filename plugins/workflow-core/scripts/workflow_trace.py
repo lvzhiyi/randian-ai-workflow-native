@@ -245,10 +245,15 @@ def is_code(path):
         '.dart', '.py', '.ts', '.tsx', '.js', '.jsx', '.vue', '.kt', '.swift', '.java', '.sh')
 
 
+def code_edit_steps(steps):
+    """返回成功改动手写代码的步骤（含 Bash 写入）。"""
+    return [s for s in steps if not s['error'] and (
+        (s['kind'] == 'edit' and is_code(s['title'])) or s.get('bash_edits'))]
+
+
 def build_checks(steps):
     """根据步骤生成检查结果，返回 [(状态, 名称, 说明)]；状态 ok / warn / fail / na。"""
-    edits = [s for s in steps if not s['error'] and (
-        (s['kind'] == 'edit' and is_code(s['title'])) or s.get('bash_edits'))]
+    edits = code_edit_steps(steps)
     files = {s.get('rel', s['title']) for s in edits if s['kind'] == 'edit'} | {f for s in edits for f in s.get('bash_edits', ())}
     last_edit = max((s['start'] for s in edits), default=None)
     checks = [('ok' if edits else 'na', '代码改动', f'{len(files)} 个手写代码文件（含 Bash 写入，按命令文本推断）' if edits else '没有改动手写代码')]
