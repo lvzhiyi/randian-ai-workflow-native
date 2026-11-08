@@ -89,3 +89,15 @@ description: 双轴代码评审（Spec + Standards）。标准档、完整档交
 - 交付“验证”项写一行：`AI 评审（Spec/Standards）：<n>/<m> 项，阻塞 <a+b>；范围 <对比点>..HEAD`；跳过的轴写明原因。
 - 存在未解决的“阻塞”时，完成状态不能写“可评审”或更高；用户明确接受的例外按 `deliver` 记录。
 - 评审结果默认只在会话中；未解决的阻塞项写入任务卡或变更已有的待确认/剩余字段，不新建评审文件。
+
+## 7. 记录度量
+
+报告给用户后写一条度量记录，同一范围重复评审时只记最后一次。`rule` 用报告里的依据（文件 + 规则标题，或“坏味道：<名称>”）；`sources` 列本次实际检查过的规则来源；只写这些字段，不写代码和规格原文。
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_metric.py" record review --session "${CLAUDE_SESSION_ID}" <<'JSON'
+{"task": "<任务编号或分支>", "tier": "轻量|标准|完整", "files": <文件数>, "sources": ["<规则来源>"], "skipped_axes": [], "findings": [{"axis": "spec|standards", "severity": "阻塞|应修|建议", "rule": "<依据>"}]}
+JSON
+```
+
+记录失败时按输出修正一次，仍失败就在“剩余”说明；度量不影响评审结论。

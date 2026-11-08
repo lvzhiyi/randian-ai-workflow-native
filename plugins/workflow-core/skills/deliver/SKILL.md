@@ -37,3 +37,15 @@ description: 统一交付结果与完成状态口径。任务做完（或阶段�
 | 受阻 | 缺关键条件，记录原因、已做工作和恢复条件 |
 
 提交、合并、发布各自遵守授权边界。
+
+## 记录度量
+
+任务结束或阶段性停下、写最终回复前，写一条度量记录，所有档位都要。`status` 与结论一致；`unverified` 按 `verify` 的分类写未验证的原因，默认范围外的平台写“按约定未执行”；`resolutions` 写本次评审问题的去向，`rule` 与评审记录一致；`review` 按实际写“已评审 / 已跳过 / 不要求”。只写这些字段，不写代码、命令或日志。
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_metric.py" record deliver --session "${CLAUDE_SESSION_ID}" <<'JSON'
+{"task": "<任务编号或分支>", "tier": "轻量|标准|完整", "status": "实施完成，待验证|可评审|可合并|已上线|受阻", "code_changed": true, "review": "已评审|已跳过|不要求", "unverified": [], "resolutions": [{"rule": "<依据>", "outcome": "已修复|接受例外|未解决"}]}
+JSON
+```
+
+记录失败时按输出修正一次，仍失败就在“剩余”说明；度量不影响交付结论。

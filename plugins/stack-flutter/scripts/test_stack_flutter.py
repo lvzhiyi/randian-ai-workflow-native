@@ -25,6 +25,11 @@ class RepoTestCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name).resolve()
+        self.metrics = tempfile.TemporaryDirectory()
+        self.addCleanup(self.metrics.cleanup)
+        env = patch.dict(os.environ, {'WORKFLOW_METRICS_DIR': self.metrics.name})
+        env.start()
+        self.addCleanup(env.stop)
         git(self.root, 'init', '-q')
         self.write('pubspec.yaml', 'name: demo\n')
         self.write('lib/a.dart', 'void a() {}\n')
@@ -130,6 +135,26 @@ class StopHookTests(RepoTestCase):
         result, analyzer = self.hook({'cwd': str(self.root)})
         self.assertIsNone(result)
         analyzer.assert_not_called()
+
+    def outcomes(self):
+        path = Path(self.metrics.name) / 'records.jsonl'
+        return [json.loads(l)['outcome'] for l in path.read_text(encoding='utf-8').splitlines()] if path.exists() else []
+
+    def test_metrics_record_block_and_retry_outcomes(self):
+        self.write('lib/a.dart', 'broken(')
+        self.hook({'cwd': str(self.root), 'session_id': 's'}, ['e'])
+        self.hook({'cwd': str(self.root), 'session_id': 's', 'stop_hook_active': True}, ['e'])
+        self.hook({'cwd': str(self.root), 'session_id': 's', 'stop_hook_active': True}, [])
+        self.assertEqual(self.outcomes(), ['blocked', 'unresolved', 'fixed'])
+
+    def test_metrics_skip_clean_pass_analyzer_failure_and_disabled(self):
+        self.write('lib/a.dart', 'void a2() {}')
+        self.hook({'cwd': str(self.root)}, [])
+        self.hook({'cwd': str(self.root), 'stop_hook_active': True}, None)
+        self.assertEqual(self.outcomes(), [])
+        (Path(self.metrics.name) / 'disabled').touch()
+        self.hook({'cwd': str(self.root)}, ['e'])
+        self.assertEqual(self.outcomes(), [])
 
     def test_errors_ask_claude_to_continue(self):
         self.write('lib/a.dart', 'broken(')

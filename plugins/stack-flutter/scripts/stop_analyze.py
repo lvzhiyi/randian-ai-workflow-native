@@ -13,6 +13,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from flutter_check import changed_dart_files, clean_env  # noqa: E402
@@ -67,6 +68,30 @@ def analyze_errors(root, files):
     return errors
 
 
+def record_metric(event, root, outcome, errors):
+    """写一条拦截度量，只含计数；出错时静默跳过，不影响钩子。
+
+    参数 [event]：Stop 事件；[root]：项目根；[outcome]：blocked 已拦截、fixed 重试后无错误、
+    unresolved 重试后仍有错误；[errors]：错误数。
+    其他 Stop 钩子也可能让回合继续，统计时 fixed 要与同会话的 blocked 配对。
+    """
+    try:
+        folder = Path(os.environ.get('WORKFLOW_METRICS_DIR') or Path.home() / '.claude' / 'workflow-metrics')
+        if (folder / 'disabled').exists():
+            return
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        line = json.dumps({'v': 1, 'ts': time.time(), 'type': 'stop_block', 'session_id': event.get('session_id', ''),
+                           'project': root.name, 'stack': 'flutter', 'outcome': outcome, 'errors': errors},
+                          ensure_ascii=False)
+        handle = os.open(folder / 'records.jsonl', os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(handle, (line + '\n').encode('utf-8'))
+        finally:
+            os.close(handle)
+    except Exception:  # 度量故障不能影响钩子
+        pass
+
+
 def main():
     """钩子入口：读取 stdin 的 Stop 事件，按需输出钩子 JSON。
 
@@ -83,12 +108,17 @@ def main():
     if not files:
         return 0
     errors = analyze_errors(root, files)
+    if errors is None:
+        return 0
     if not errors:
+        if event.get('stop_hook_active'):
+            record_metric(event, root, 'fixed', 0)
         return 0
 
     shown = errors[:MAX_REPORTED]
     more = f'\n……另有 {len(errors) - MAX_REPORTED} 条未列出' if len(errors) > MAX_REPORTED else ''
     detail = '\n'.join(f'- {item}' for item in shown) + more
+    record_metric(event, root, 'unresolved' if event.get('stop_hook_active') else 'blocked', len(errors))
     if event.get('stop_hook_active'):
         # 已经因本钩子继续过一次仍有错误：放行结束，只提示用户，避免无限循环。
         print(json.dumps({'systemMessage': f'stack-flutter：本次改动的 Dart 文件仍有 {len(errors)} 个分析错误，'

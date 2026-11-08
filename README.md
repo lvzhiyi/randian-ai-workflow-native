@@ -403,6 +403,7 @@ ai-dev-workflow/
 | `stack-flutter/scripts/stop_analyze.py` | Stop 钩子：结束回合前对改动的 Dart 文件跑 `dart analyze`，有 error 让 AI 先修 | `stack-flutter/hooks/hooks.json` |
 | `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式、术语表词条；路径读 `ai-workflow.yaml`，可用参数覆盖；`--check-config` 检查配置路径 |
 | `workflow-core/scripts/trace_hook.py`、`trace_server.py` | 可选的执行轨迹：钩子把工具调用写入本机日志，本地页面实时展示；默认关闭 | `trace` 技能、`hooks/hooks.json` |
+| `workflow-core/scripts/workflow_metric.py` | 把评审、交付结论写成结构化度量（只存枚举、计数和规则名，默认开启；`off` 关闭），`stack-flutter` 的 Stop 钩子写入同一文件 | `review`、`deliver` 技能 |
 | `workflow-core/scripts/workflow_trace.py` | 从 Claude Code 会话记录事后生成单页轨迹 | 手动运行 |
 | `workflow-core/scripts/workflow_config.py` | 解析与校验 `ai-workflow.yaml`（YAML 受限子集） | `prd-breakdown`、`verify` 技能；项目 CI |
 
@@ -424,7 +425,7 @@ flowchart LR
 - uses: actions/checkout@v4
   with:
     repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.9.0
+    ref: workflow-core--v0.10.0
     path: .ai-workflow
 - run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
 ```
