@@ -6,7 +6,7 @@
 - 记录代码改动和 deliver 技能；回合结束时如果最后一次改动之后没有 deliver，提醒一次。
 
 只提醒、不阻断：stop_hook_active 为 true 时直接放行，任何异常都放行。
-状态写在 ~/.claude/workflow-gate/，可用 WORKFLOW_GATE_DIR 覆盖；目录下有 disabled 文件时关闭。
+状态写在对应客户端的 workflow-gate/，可用 WORKFLOW_GATE_DIR 覆盖；目录下有 disabled 文件时关闭。
 """
 import json
 import os
@@ -16,6 +16,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent))
+from trace_hook import PATCH_PATH, is_codex, response_text, workflow_home  # noqa: E402
 from workflow_trace import BASH_WRITE, CODE_PATH, is_code  # noqa: E402
 
 SESSION_ID = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
@@ -26,11 +27,16 @@ SESSION_CONTEXT = ('这个项目接入了 ai-dev-workflow。开发任务（需�
 STOP_CONTEXT = ('本会话最后一次代码改动之后还没有调用 workflow-core:deliver。如果任务已完成或阶段性停下，'
                 '请先用 Skill 工具加载 workflow-core:deliver，按它完成验证证据、评审和统一交付。'
                 '如果正在等用户回答或任务还没做完，直接结束本回合即可。')
+CODEX_SESSION_CONTEXT = ('这个项目接入了 ai-dev-workflow。开发任务开工时加载 $workflow-core:workflow 并分档，'
+                         '改了代码后用 $workflow-core:verify 验证，用 $workflow-core:deliver 交付。')
+CODEX_STOP_MESSAGE = ('ai-dev-workflow：本会话最后一次代码改动之后还没有记录交付。'
+                      '任务结束或阶段性停下时，请用 $workflow-core:deliver。')
+DELIVERY_COMMAND = re.compile(r"""(?:^|[/\s])workflow_metric\.py['"]?\s+record\s+deliver\b""")
 
 
 def gate_dir():
     """返回状态目录。"""
-    return Path(os.environ.get('WORKFLOW_GATE_DIR') or Path.home() / '.claude' / 'workflow-gate')
+    return Path(os.environ.get('WORKFLOW_GATE_DIR') or workflow_home() / 'workflow-gate')
 
 
 def project_uses_workflow(cwd):
@@ -68,8 +74,16 @@ def classify(event):
         return 'deliver' if is_deliver(data.get('skill')) else None
     if tool in EDIT_TOOLS:
         return 'edit' if is_code(str(data.get('file_path') or data.get('notebook_path') or '')) else None
+    if tool == 'apply_patch':
+        return 'edit' if any(map(is_code, PATCH_PATH.findall(data.get('command', '')))) else None
     if tool == 'Bash':
-        return 'edit' if bash_changes_code(data.get('command', ''), event.get('cwd')) else None
+        command = data.get('command', '')
+        if is_codex() and DELIVERY_COMMAND.search(command):
+            output = response_text(event.get('tool_response'))
+            if any(line.startswith(('status=RECORDED type=deliver', 'status=SKIPPED reason=度量已关闭'))
+                   for line in output.splitlines()):
+                return 'deliver'
+        return 'edit' if bash_changes_code(command, data.get('workdir') or event.get('cwd')) else None
     return None
 
 
@@ -120,10 +134,14 @@ def handle(event, root):
     if name == 'SessionStart':
         if root.is_dir():
             prune(root)
-        emit('SessionStart', SESSION_CONTEXT)
+        emit('SessionStart', CODEX_SESSION_CONTEXT if is_codex() else SESSION_CONTEXT)
     elif name == 'Stop':
         if not event.get('stop_hook_active') and needs_deliver(root, session_id):
-            emit('Stop', STOP_CONTEXT)
+            if is_codex():
+                append_state(root, session_id, 'reminded')
+                print(json.dumps({'systemMessage': CODEX_STOP_MESSAGE}, ensure_ascii=False))
+            else:
+                emit('Stop', STOP_CONTEXT)
     else:
         kind = classify(event)
         if kind:

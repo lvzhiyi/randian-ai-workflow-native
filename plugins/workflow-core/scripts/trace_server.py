@@ -109,11 +109,13 @@ def reduce_events(events, config_for):
             step.update(end=stamp, duration_ms=event.get('duration_ms'))
             if name == 'PostToolUse':
                 step['output'] = event.get('output', '')
+                if event.get('host') == 'codex' and step['tool'] == 'Bash':
+                    step['no_exit_code'] = True
                 if step['kind'] == 'agent' and 'async_launched' in step['output']:
                     step['group'] = '已转入后台，结果见下方子代理步骤'
             else:
                 step.update(error=True, output=event.get('error', ''))
-        elif name == 'Stop' and not event.get('agent_id'):
+        elif name in ('Stop', 'Interrupt') and not event.get('agent_id'):
             abandon()
             state = 'idle'
     for step in by_id.values():
@@ -182,8 +184,8 @@ details.step.running{border-left-color:var(--accent)}details.step.sub{margin-lef
 
 PAGE_JS = r'''
 const KINDS={skill:'Skill',mcp:'MCP',verify:'验证',edit:'改动',agent:'子代理',bash:'命令',read:'读取'};
-const MARK={ok:'✓',fail:'✕',warn:'!',masked:'!',na:'–',pending:'…'};
-const TEXT={ok:'通过',fail:'失败',masked:'退出码被掩盖',pending:'无结果',running:'运行中'};
+const MARK={ok:'✓',fail:'✕',warn:'!',masked:'!',unknown:'!',na:'–',pending:'…'};
+const TEXT={ok:'通过',fail:'失败',masked:'退出码被掩盖',unknown:'结果未确认',pending:'无结果',running:'运行中'};
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e};
 let sid=null,pinned=false,version='',filter='all',listKey='',turnEls=[],stepEls=new Map();
@@ -393,9 +395,14 @@ def main():
     parser.add_argument('--port', type=int)
     args = parser.parse_args()
     root = trace_dir()
-    Path(root).mkdir(parents=True, exist_ok=True, mode=0o700)
-    return {'on': lambda: turn_on(root), 'off': lambda: turn_off(root), 'status': lambda: show_status(root),
-            'serve': lambda: serve(root, args.port)}[args.action]()
+    try:
+        if args.action == 'serve':
+            Path(root).mkdir(parents=True, exist_ok=True, mode=0o700)
+            return serve(root, args.port)
+        return {'on': turn_on, 'off': turn_off, 'status': show_status}[args.action](root)
+    except OSError as error:
+        print(f'status=BLOCKED reason={error}')
+        return 2
 
 
 if __name__ == '__main__':

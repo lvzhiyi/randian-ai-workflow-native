@@ -1,7 +1,7 @@
 {
   "name": "api-apifox",
   "displayName": "API: Apifox",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Apifox 接口契约：CLI/MCP 读取、写入与运行的授权边界",
   "author": { "name": "吕治易" },
   "license": "UNLICENSED",

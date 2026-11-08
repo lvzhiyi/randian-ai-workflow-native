@@ -170,6 +170,16 @@ class StopHookTests(RepoTestCase):
         self.assertNotIn('hookSpecificOutput', result)
         self.assertIn('systemMessage', result)
 
+    def test_codex_stop_requests_one_continuation(self):
+        self.write('lib/a.dart', 'broken(')
+        event = {'cwd': str(self.root), 'turn_id': 't1'}
+        with patch.dict(os.environ, {'WORKFLOW_HOST': 'codex'}):
+            blocked, _ = self.hook(event, ['lib/a.dart:1:1 bad'])
+            retried, _ = self.hook({**event, 'stop_hook_active': True}, ['lib/a.dart:1:1 bad'])
+        self.assertEqual(blocked['decision'], 'block')
+        self.assertIn('lib/a.dart:1:1 bad', blocked['reason'])
+        self.assertEqual(list(retried), ['systemMessage'])
+
     def test_clean_analysis_and_unavailable_analyzer_allow_stop(self):
         self.write('lib/a.dart', 'void a() { }\n')
         for errors in ([], None):

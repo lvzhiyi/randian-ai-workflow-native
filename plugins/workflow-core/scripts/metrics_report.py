@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """流程度量报告：汇总技能触发率、评审、拦截、待验证比例，生成规则命中表和删除候选（只读，仅用 Python 标准库）。
 
-数据来源：workflow_metric.py 写的 records.jsonl，和 Claude Code 会话记录（算触发率）。
+数据来源：workflow_metric.py 写的 records.jsonl，Claude Code 另读取会话记录计算技能触发率。
 用法：metrics_report.py [--project 目录] [--days 90] [--all] [--min-reviews 20]
 """
 import argparse
@@ -14,6 +14,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent))
+from trace_hook import is_codex  # noqa: E402
 from workflow_metric import git_value, metrics_dir  # noqa: E402
 from workflow_trace import code_edit_steps, parse_session, read_jsonl  # noqa: E402
 
@@ -164,25 +165,30 @@ def render(args, name, usages, records, older):
     reviews = [r for r in records if r.get('type') == 'review']
     delivers = [r for r in records if r.get('type') == 'deliver']
     stops = [r for r in records if r.get('type') == 'stop_block']
-    stats = trigger_stats(usages, records)
     scope = '本机所有项目' if args.all else f'项目 {name}'
-    lines = [f'# 流程度量报告', '', f'范围：{scope}，最近 {args.days} 天。样本：{len(usages)} 个会话，'
+    sessions = f'{len(usages)} 个会话，' if usages is not None else ''
+    lines = ['# 流程度量报告', '', f'范围：{scope}，最近 {args.days} 天。样本：{sessions}'
              f'{len(reviews)} 次评审，{len(delivers)} 次交付，{len(stops)} 条拦截记录。', '']
     if len(delivers) < args.min_reviews:
         lines += [f'> 样本不足（交付记录 {len(delivers)}/{args.min_reviews}）：以下数字只看趋势，不下结论。', '']
 
-    lines += ['## 技能触发率', '', '分母是改了手写代码的会话（一个会话可能含多个任务，子代理内的改动未计入）。', '',
-              '| 环节 | 触发 |', '| --- | --- |']
-    for label, key in (('任一 workflow-core 技能', 'any'), ('verify', 'verify'), ('review', 'review'), ('deliver', 'deliver'),
-                       ('写了交付度量记录', 'recorded')):
-        lines.append(f'| {label} | {percent(stats[key], stats["total"])} |')
-    if stats['other_review'] or stats['other_deliver']:
-        lines += ['', f'另有未改代码的会话触发了 review {stats["other_review"]} 次、deliver {stats["other_deliver"]} 次'
-                      '（如对已有分支补评审），不计入上表。']
-    review_rate = stats['review'] / stats['total'] if stats['total'] else 0
-    low_trigger = review_rate < LOW_TRIGGER
-    if low_trigger:
-        lines += ['', f'> review 触发率低于 {int(LOW_TRIGGER * 100)}%：规则零命中可能只是没被检查，先解决触发问题。']
+    low_trigger = True
+    if usages is None:
+        lines += ['## 技能触发率', '', 'Codex 暂无技能触发率数据。规则删除候选暂不列出。']
+    else:
+        stats = trigger_stats(usages, records)
+        lines += ['## 技能触发率', '', '分母是改了手写代码的会话（一个会话可能含多个任务，子代理内的改动未计入）。', '',
+                  '| 环节 | 触发 |', '| --- | --- |']
+        for label, key in (('任一 workflow-core 技能', 'any'), ('verify', 'verify'), ('review', 'review'), ('deliver', 'deliver'),
+                           ('写了交付度量记录', 'recorded')):
+            lines.append(f'| {label} | {percent(stats[key], stats["total"])} |')
+        if stats['other_review'] or stats['other_deliver']:
+            lines += ['', f'另有未改代码的会话触发了 review {stats["other_review"]} 次、deliver {stats["other_deliver"]} 次'
+                          '（如对已有分支补评审），不计入上表。']
+        review_rate = stats['review'] / stats['total'] if stats['total'] else 0
+        low_trigger = review_rate < LOW_TRIGGER
+        if low_trigger:
+            lines += ['', f'> review 触发率低于 {int(LOW_TRIGGER * 100)}%：规则零命中可能只是没被检查，先解决触发问题。']
 
     blocked_sessions = {r.get('session_id') for r in stops if r.get('outcome') == 'blocked'}
     outcomes = Counter(r.get('outcome') for r in stops if r.get('outcome') != 'fixed' or r.get('session_id') in blocked_sessions)
@@ -210,7 +216,9 @@ def render(args, name, usages, records, older):
 
     found = deletion_candidates(reviews, older, args.min_reviews)
     lines += ['', '## 删除候选', '', '候选只供人工判断，不会自动删除。只能精确到规则来源文件，或曾经命中过的规则；从未命中的单条规则无法单独识别。', '']
-    if found['candidates'] and not low_trigger:
+    if usages is None:
+        lines.append('缺少技能触发率，保留规则供人工核对。')
+    elif found['candidates'] and not low_trigger:
         lines += ['| 名称 | 原因 | 检查次数 |', '| --- | --- | --- |']
         lines += [f'| {cell(n)} | {why} | {times} |' for n, why, times in found['candidates']]
     elif found['candidates']:
@@ -232,11 +240,14 @@ def main():
     parser.add_argument('--all', action='store_true')
     parser.add_argument('--min-reviews', type=int, default=20)
     args = parser.parse_args()
+    args.project = args.project or '.'  # Codex 不替换 ${CLAUDE_PROJECT_DIR}，shell 展开后为空
     since = time.time() - args.days * DAY
     name = project_name(args.project)
     records = [r for r in load_records(metrics_dir()) if args.all or r.get('project') == name]
-    projects_dir = os.environ.get('WORKFLOW_CLAUDE_PROJECTS') or Path.home() / '.claude' / 'projects'
-    usages = [session_usage(path) for path in transcript_files(projects_dir, args.project, args.all, since)]
+    usages = None
+    if not is_codex():
+        projects_dir = os.environ.get('WORKFLOW_CLAUDE_PROJECTS') or Path.home() / '.claude' / 'projects'
+        usages = [session_usage(path) for path in transcript_files(projects_dir, args.project, args.all, since)]
     current = [r for r in records if r.get('ts', 0) >= since]
     older = [r for r in records if r.get('ts', 0) < since and r.get('type') == 'review']
     sys.stdout.write(render(args, name, usages, current, older))

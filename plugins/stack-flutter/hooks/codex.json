@@ -1,0 +1,16 @@
+{
+  "description": "回合结束前分析改动的手写 Dart 文件",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/stop_analyze.py\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

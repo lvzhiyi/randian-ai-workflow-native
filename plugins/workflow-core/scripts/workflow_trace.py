@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
 from workflow_config import ConfigError, parse_yaml_subset  # noqa: E402
-from trace_hook import clip, redact  # noqa: E402
+from trace_hook import PATCH_PATH, clip, redact  # noqa: E402
 
 KIND_LABELS = {'skill': 'Skill', 'mcp': 'MCP', 'verify': '验证', 'edit': '改动',
                'agent': '子代理', 'bash': '命令', 'read': '读取'}
@@ -136,7 +136,10 @@ def describe(name, data):
         return 'mcp', parts[-1], parts[1] if len(parts) > 2 else ''
     if name in EDIT_TOOLS:
         return 'edit', data.get('file_path') or data.get('notebook_path') or '?', ''
-    if name in ('Agent', 'Task'):
+    if name == 'apply_patch':
+        paths = data.get('patch_paths') or PATCH_PATH.findall(data.get('command', ''))
+        return 'edit', next((path for path in paths if is_code(path)), next(iter(paths), '?')), ''
+    if name in ('Agent', 'Task', 'spawn_agent'):
         return 'agent', data.get('description') or data.get('subagent_type') or '子代理', ''
     if name in READ_TOOLS:
         return 'read', data.get('file_path') or data.get('pattern') or data.get('path') or '?', name
@@ -152,8 +155,10 @@ def make_step(tool, data, stamp, config, root):
         return None
     step = {'kind': step_kind, 'title': title, 'group': group, 'tool': tool, 'start': stamp, 'end': None,
             'error': False, 'output': '', 'detail': json.dumps(data, ensure_ascii=False, indent=1)}
-    if step_kind == 'edit' and title.startswith(str(root.resolve())):
+    if step_kind == 'edit' and root.resolve() in Path(title).parents:
         step['rel'] = str(Path(title).relative_to(root.resolve()))
+    if tool == 'apply_patch':
+        step['patch_paths'] = data.get('patch_paths') or PATCH_PATH.findall(data.get('command', ''))
     if tool == 'Bash':
         step['detail'] = data.get('command', '')
         if BASH_WRITE.search(step['detail']):
@@ -226,7 +231,7 @@ def parse_session(path, config, root=Path('.')):
 
 
 def status_of(step):
-    """判定步骤结果：ok、fail、masked（退出码被掩盖且输出无失败特征）或 pending。"""
+    """根据退出信息和可识别的输出判断步骤结果。"""
     if step['end'] is None:
         return 'running' if step.get('live') else 'pending'
     if step['error']:
@@ -236,6 +241,8 @@ def status_of(step):
             return 'fail'
         if step.get('masked'):
             return 'ok' if SUCCESS_OUTPUT.search(step['output']) else 'masked'
+        if step.get('no_exit_code') and not SUCCESS_OUTPUT.search(step['output']):
+            return 'unknown'
     return 'ok'
 
 
@@ -254,7 +261,12 @@ def code_edit_steps(steps):
 def build_checks(steps):
     """根据步骤生成检查结果，返回 [(状态, 名称, 说明)]；状态 ok / warn / fail / na。"""
     edits = code_edit_steps(steps)
-    files = {s.get('rel', s['title']) for s in edits if s['kind'] == 'edit'} | {f for s in edits for f in s.get('bash_edits', ())}
+    files = set()
+    for step in edits:
+        if step['kind'] == 'edit':
+            paths = step.get('patch_paths') or (step.get('rel', step['title']),)
+            files.update(path for path in paths if is_code(path))
+        files.update(step.get('bash_edits', ()))
     last_edit = max((s['start'] for s in edits), default=None)
     checks = [('ok' if edits else 'na', '代码改动', f'{len(files)} 个手写代码文件（含 Bash 写入，按命令文本推断）' if edits else '没有改动手写代码')]
 
@@ -268,7 +280,8 @@ def build_checks(steps):
             return ('warn', label, note)
         final = after[-1]
         text = {'ok': '最后一次改动后已通过', 'fail': '最后一次改动后的运行失败',
-                'masked': '已运行，退出码被管道掩盖，输出无失败特征', 'pending': '没有结果', 'running': '正在运行'}[final['status']]
+                'masked': '已运行，退出码被管道掩盖，输出无失败特征', 'unknown': '已运行，输出不足以确认结果',
+                'pending': '没有结果', 'running': '正在运行'}[final['status']]
         return ('ok' if final['status'] == 'ok' else 'fail' if final['status'] == 'fail' else 'warn', label, text)
 
     checks += [coverage('analyze', '静态分析'), coverage('test', '测试')]
@@ -294,7 +307,7 @@ main{max-width:920px;margin:0 auto;padding:24px 16px 64px}h1{font-size:20px;marg
 .stats{display:flex;flex-wrap:wrap;gap:8px}.stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:84px}
 .stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}.stat span{color:var(--quiet);font-size:12px}
 .check{display:grid;grid-template-columns:20px 88px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
-.ok{color:var(--ok)}.fail{color:var(--fail)}.warn,.masked{color:var(--warn)}.na,.pending{color:var(--quiet)}
+.ok{color:var(--ok)}.fail{color:var(--fail)}.warn,.masked,.unknown{color:var(--warn)}.na,.pending{color:var(--quiet)}
 .filters{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:1}
 button{font:inherit;font-size:13px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer}
 button[aria-pressed=true]{border-color:var(--accent);color:var(--accent);font-weight:600}

@@ -1,7 +1,7 @@
 {
   "name": "stack-flutter",
   "displayName": "Stack: Flutter",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Flutter 技术栈惯例：版本核对、默认检查脚本（格式/analyze/测试）、Stop 钩子兜底静态分析、评审清单、各平台验证方法",
   "author": { "name": "吕治易" },
   "license": "UNLICENSED",

@@ -72,6 +72,30 @@ class MetricTests(unittest.TestCase):
         self.run_record('review', REVIEW)
         self.assertEqual(len(self.records()), 1)
 
+    def test_write_failure_returns_a_blocked_status(self):
+        (self.root / 'records.jsonl').mkdir()
+        code, output = self.run_record('deliver', DELIVER)
+        self.assertEqual(code, 2)
+        self.assertIn('status=BLOCKED', output)
+
+
+class CliTests(unittest.TestCase):
+    def test_empty_session_falls_back_to_codex_thread(self):
+        with tempfile.TemporaryDirectory() as folder:
+            env = {'WORKFLOW_METRICS_DIR': folder, 'WORKFLOW_HOST': 'codex', 'CODEX_THREAD_ID': 'thread-1'}
+            with mock.patch.dict(os.environ, env), mock.patch.object(sys, 'argv', ['x', 'record', 'review', '--session', '']), \
+                    mock.patch('sys.stdin', io.StringIO(json.dumps(REVIEW))), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(metric.main(), 0)
+            line = (Path(folder) / 'records.jsonl').read_text(encoding='utf-8')
+            self.assertEqual(json.loads(line)['session_id'], 'thread-1')
+
+    def test_skills_keep_claude_substitutions(self):
+        skills = Path(__file__).parent.parent / 'skills'
+        for name in ('review', 'deliver'):
+            self.assertIn('--session "${CLAUDE_SESSION_ID}"', (skills / name / 'SKILL.md').read_text(encoding='utf-8'))
+        self.assertEqual([p for p in skills.glob('*/SKILL.md') if 'WORKFLOW_PLUGIN_ROOT' in p.read_text(encoding='utf-8')], [])
+        self.assertIn('--project "${CLAUDE_PROJECT_DIR}" $ARGUMENTS', (skills / 'metrics' / 'SKILL.md').read_text(encoding='utf-8'))
+
 
 if __name__ == '__main__':
     unittest.main()

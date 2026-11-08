@@ -1,7 +1,7 @@
 {
   "name": "design-pixso",
   "displayName": "Design: Pixso",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pixso 设计来源：MCP 接入、节点定位、读取层级与视觉核对",
   "author": { "name": "吕治易" },
   "license": "UNLICENSED",

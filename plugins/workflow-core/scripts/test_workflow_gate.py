@@ -20,9 +20,9 @@ class GateTests(unittest.TestCase):
         (self.project / '.git').mkdir(parents=True)
         (self.project / 'ai-workflow.yaml').write_text('version: 1\n', encoding='utf-8')
 
-    def hook(self, name, cwd=None, **extra):
+    def hook(self, name, cwd=None, host='claude', **extra):
         payload = {'session_id': 's1', 'cwd': str(cwd or self.project), 'hook_event_name': name, **extra}
-        env = {**os.environ, 'WORKFLOW_GATE_DIR': str(self.state)}
+        env = {**os.environ, 'WORKFLOW_GATE_DIR': str(self.state), 'WORKFLOW_HOST': host}
         result = subprocess.run([sys.executable, str(HERE / 'workflow_gate.py')], input=json.dumps(payload), text=True,
                                 capture_output=True, env=env)
         self.assertEqual(result.returncode, 0)
@@ -68,6 +68,35 @@ class GateTests(unittest.TestCase):
     def test_stop_hook_active_releases(self):
         self.edit()
         self.assertIsNone(self.hook('Stop', stop_hook_active=True))
+
+    def test_codex_patch_reminds_once_until_the_next_edit(self):
+        def patch(path):
+            self.hook('PostToolUse', host='codex', tool_name='apply_patch', tool_input={
+                'command': f'*** Begin Patch\n*** Update File: {path}\n*** End Patch'})
+
+        patch('docs/a.md')
+        self.assertIsNone(self.hook('Stop', host='codex'))
+        patch('lib/a.dart')
+        self.assertIn('$workflow-core:deliver', self.hook('Stop', host='codex')['systemMessage'])
+        self.assertIsNone(self.hook('Stop', host='codex'))
+        patch('lib/with spaces.dart')
+        self.assertIn('$workflow-core:deliver', self.hook('Stop', host='codex')['systemMessage'])
+
+    def test_codex_successful_delivery_clears_reminder(self):
+        command = 'python3 "/some plugin/scripts/workflow_metric.py" record deliver'
+
+        def deliver(output):
+            self.hook('PostToolUse', host='codex', tool_name='Bash', tool_input={'command': command},
+                      tool_response=output)
+
+        self.hook('PostToolUse', host='codex', tool_name='apply_patch', tool_input={
+            'command': '*** Delete File: lib/a.dart'})
+        deliver('Output:\nstatus=REJECTED reason=记录不符合格式\n')
+        self.assertIn('$workflow-core:deliver', self.hook('Stop', host='codex')['systemMessage'])
+        self.hook('PostToolUse', host='codex', tool_name='apply_patch', tool_input={
+            'command': '*** Update File: lib/b.dart'})
+        deliver('Output:\nstatus=RECORDED type=deliver\n')
+        self.assertIsNone(self.hook('Stop', host='codex'))
 
     def test_bash_write_needs_existing_code_path(self):
         (self.project / 'lib').mkdir()

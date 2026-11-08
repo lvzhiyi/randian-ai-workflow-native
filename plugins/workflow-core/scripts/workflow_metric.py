@@ -2,12 +2,12 @@
 """流程度量记录：把评审和交付的结论写成一行结构化数据（仅用 Python 标准库）。
 
 只接受固定字段：枚举、计数和不超过 120 字符的单行文本（任务名、规则名），不存代码、命令或输出。
-记录写在 ~/.claude/workflow-metrics/records.jsonl，可用 WORKFLOW_METRICS_DIR 覆盖目录。
+记录写在对应客户端的 workflow-metrics/records.jsonl，可用 WORKFLOW_METRICS_DIR 覆盖目录。
 
 用法：
   workflow_metric.py record review|deliver [--session ID] < 记录.json
   workflow_metric.py on | off | status
-退出码：0 已记录或已关闭，1 记录不符合格式。度量失败不影响评审和交付。
+退出码：0 已记录或已关闭，1 记录不符合格式，2 无法写入。度量失败不影响评审和交付。
 """
 import argparse
 import json
@@ -18,7 +18,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent))
-from trace_hook import redact  # noqa: E402
+from trace_hook import is_codex, redact, workflow_home  # noqa: E402
 
 TIERS = ('轻量', '标准', '完整')
 AXES = ('spec', 'standards')
@@ -37,7 +37,7 @@ class RecordError(Exception):
 
 def metrics_dir():
     """返回度量数据目录。"""
-    return Path(os.environ.get('WORKFLOW_METRICS_DIR') or Path.home() / '.claude' / 'workflow-metrics')
+    return Path(os.environ.get('WORKFLOW_METRICS_DIR') or workflow_home() / 'workflow-metrics')
 
 
 def text(value, name):
@@ -137,7 +137,11 @@ def record(kind, session, raw, cwd='.'):
     entry = {'v': 1, 'ts': time.time(), 'type': kind, 'session_id': session or '',
              'project': os.path.basename(top or os.path.abspath(cwd)),
              'branch': git_value(['branch', '--show-current'], cwd), **cleaned}
-    append_record(root, entry)
+    try:
+        append_record(root, entry)
+    except OSError as error:
+        print(f'status=BLOCKED reason={error}')
+        return 2
     print(f'status=RECORDED type={kind}')
     return 0
 
@@ -162,13 +166,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['record', 'on', 'off', 'status'])
     parser.add_argument('kind', nargs='?', choices=['review', 'deliver'])
-    parser.add_argument('--session', default='')
+    session_var = 'CODEX_THREAD_ID' if is_codex() else 'CLAUDE_SESSION_ID'
+    parser.add_argument('--session', default=os.environ.get(session_var, ''))
     args = parser.parse_args()
     if args.action != 'record':
         return switch(args.action)
     if not args.kind:
         parser.error('record 需要指定 review 或 deliver')
-    return record(args.kind, args.session, sys.stdin.read())
+    # Codex 不替换技能里的 ${CLAUDE_SESSION_ID}，shell 展开后传入空字符串。
+    session = args.session or os.environ.get(session_var, '')
+    return record(args.kind, session, sys.stdin.read())
 
 
 if __name__ == '__main__':

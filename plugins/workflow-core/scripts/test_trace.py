@@ -76,6 +76,31 @@ class ReduceTests(unittest.TestCase):
         step = self.step(reduce(pre('a', 1), post('a', 2, name='PostToolUseFailure', error='Exit code 1')))
         self.assertEqual((step['status'], step['output']), ('fail', 'Exit code 1'))
 
+    def test_codex_patch_with_docs_first_counts_as_code_edit(self):
+        command = '*** Begin Patch\n*** Add File: notes.md\n*** Update File: lib/a.dart\n*** End Patch'
+        state = reduce(pre('a', 1, tool='apply_patch', command=command), post('a', 2),
+                       {'event': 'Interrupt', 'ts': 3})
+        step = self.step(state)
+        self.assertEqual((step['kind'], step['title'], step['status']), ('edit', 'lib/a.dart', 'ok'))
+        self.assertEqual(state['state'], 'idle')
+
+    def test_codex_verification_without_exit_code_needs_success_evidence(self):
+        state = reduce(pre('edit', 1, tool='apply_patch', command='*** Add File: main.py'), post('edit', 2),
+                       pre('verify', 3, command='pytest'), post('verify', 4, output='no tests ran', host='codex'))
+        step = state['turns'][0]['steps'][1]
+        self.assertEqual(step['status'], 'unknown')
+        checks = {label: result for result, label, _ in trace_server.build_checks(state['turns'][0]['steps'])}
+        self.assertEqual(checks['测试'], 'warn')
+
+    def test_codex_trace_counts_all_source_paths_after_clipping_patch(self):
+        command = ('*** Add File: notes.md\n+' + 'x' * 2100
+                   + '\n*** Add File: lib/a.py\n+a\n*** Add File: lib/b.py\n+b')
+        event = trace_hook.build_event({'hook_event_name': 'PostToolUse', 'tool_use_id': 'patch',
+                                        'tool_name': 'apply_patch', 'tool_input': {'command': command}}, 1)
+        state = reduce(event)
+        checks = {label: detail for _, label, detail in trace_server.build_checks(state['turns'][0]['steps'])}
+        self.assertIn('2 个手写代码文件', checks['代码改动'])
+
     def test_post_without_pre_creates_step(self):
         self.assertEqual(self.step(reduce(post('a', 2)))['status'], 'ok')
 

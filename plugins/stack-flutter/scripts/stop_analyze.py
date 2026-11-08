@@ -2,10 +2,10 @@
 """stack-flutter 的 Stop 钩子：AI 结束回合前，对本次改动的手写 Dart 文件做静态分析。
 
 - 只在 Flutter/Dart 项目、且相对 HEAD 有改动的手写 Dart 文件时运行；否则直接放行。
-- 发现 error 级问题时，通过 additionalContext 让 AI 继续修复，不结束回合。
+- 发现 error 级问题时，按当前客户端的 Stop 协议请求继续修复。
 - stop_hook_active 为 true（已经因 Stop 钩子继续过一次）时不再要求继续，只提示用户，避免死循环。
 - 分析器不可用、超时或输出无法解析时一律放行：钩子出故障不能卡住会话。
-输入：Claude Code 通过 stdin 传入的 Stop 事件 JSON；输出：stdout 上的钩子 JSON（无问题时不输出）。
+输入：stdin 上的 Stop 事件 JSON；输出：stdout 上的钩子 JSON（无问题时不输出）。
 """
 import json
 import os
@@ -22,6 +22,10 @@ from flutter_check import changed_dart_files, clean_env  # noqa: E402
 ANALYZE_TIMEOUT = 90
 # 反馈给 AI 的问题条数上限，避免大量错误塞满上下文。
 MAX_REPORTED = 20
+
+
+def is_codex():
+    return os.environ.get('WORKFLOW_HOST') == 'codex'
 
 
 def project_root(cwd):
@@ -76,7 +80,9 @@ def record_metric(event, root, outcome, errors):
     其他 Stop 钩子也可能让回合继续，统计时 fixed 要与同会话的 blocked 配对。
     """
     try:
-        folder = Path(os.environ.get('WORKFLOW_METRICS_DIR') or Path.home() / '.claude' / 'workflow-metrics')
+        home = (Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex').expanduser()
+                if is_codex() else Path.home() / '.claude')
+        folder = Path(os.environ.get('WORKFLOW_METRICS_DIR') or home / 'workflow-metrics')
         if (folder / 'disabled').exists():
             return
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -126,8 +132,9 @@ def main():
         return 0
     context = (f'stack-flutter Stop 检查：本次改动的 {len(files)} 个 Dart 文件中有 {len(errors)} 个 '
                f'dart analyze 错误，结束前请先修复，或在交付“验证”项说明无法修复的原因：\n{detail}')
-    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'Stop', 'additionalContext': context}},
-                     ensure_ascii=False))
+    output = ({'decision': 'block', 'reason': context} if is_codex()
+              else {'hookSpecificOutput': {'hookEventName': 'Stop', 'additionalContext': context}})
+    print(json.dumps(output, ensure_ascii=False))
     return 0
 
 

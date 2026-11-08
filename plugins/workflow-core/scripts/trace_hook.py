@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""执行轨迹采集钩子：把 Claude Code 事件脱敏后追加到本机日志（仅用 Python 标准库）。
+"""执行轨迹采集钩子：把工具事件脱敏后追加到本机日志（仅用 Python 标准库）。
 
 默认关闭：没有开关文件时不读输入、不写数据。任何异常都静默放行，钩子不能影响会话。
-事件写在 ~/.claude/workflow-trace/events/<session_id>.jsonl，可用 WORKFLOW_TRACE_DIR 覆盖目录。
+事件写在对应客户端的 workflow-trace/events/<session_id>.jsonl，可用 WORKFLOW_TRACE_DIR 覆盖目录。
 """
 import json
 import os
+from pathlib import Path
 import re
 import sys
 import time
@@ -13,6 +14,7 @@ import time
 SECRET = re.compile(r'(?i)(bearer\s+|(?:token|password|passwd|secret|api[_-]?key)["\']?\s*[=:]\s*["\']?)'
                     r'[^\s"\'&]+|\bsk-[A-Za-z0-9_-]{12,}')
 SESSION_ID = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
+PATCH_PATH = re.compile(r'^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$', re.M)
 FORWARD = ('session_id', 'cwd', 'agent_id', 'agent_type', 'tool_name', 'tool_use_id', 'is_interrupt',
            'duration_ms', 'expansion_type', 'command_name', 'command_source')
 
@@ -28,9 +30,21 @@ def clip(text, limit=3000):
     return text if len(text) <= limit else text[:limit] + f'\n…（已截断，共 {len(text)} 字符）'
 
 
+def is_codex():
+    """由入口显式指定宿主，避免嵌套会话继承环境后走错分支。"""
+    return os.environ.get('WORKFLOW_HOST') == 'codex'
+
+
+def workflow_home():
+    """两个客户端使用各自的本机数据目录。"""
+    if is_codex():
+        return Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex').expanduser()
+    return Path.home() / '.claude'
+
+
 def trace_dir():
     """返回轨迹数据目录。"""
-    return os.environ.get('WORKFLOW_TRACE_DIR') or os.path.join(os.path.expanduser('~'), '.claude', 'workflow-trace')
+    return os.environ.get('WORKFLOW_TRACE_DIR') or str(workflow_home() / 'workflow-trace')
 
 
 def response_text(response):
@@ -53,9 +67,14 @@ def shrink_input(data):
 def build_event(hook, stamp):
     """把钩子输入转成日志事件。"""
     event = {'ts': stamp, 'event': hook.get('hook_event_name')}
+    if is_codex():
+        event['host'] = 'codex'
     event.update({key: hook[key] for key in FORWARD if key in hook})
     if 'tool_input' in hook:
-        event['input'] = shrink_input(hook['tool_input'])
+        data = hook['tool_input']
+        event['input'] = shrink_input(data)
+        if hook.get('tool_name') == 'apply_patch' and isinstance(data, dict):
+            event['input']['patch_paths'] = [clip(path) for path in PATCH_PATH.findall(data.get('command', ''))]
     if 'tool_response' in hook:
         event['output'] = clip(response_text(hook['tool_response']))
     if 'error' in hook:

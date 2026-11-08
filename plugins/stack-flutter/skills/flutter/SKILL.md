@@ -5,6 +5,8 @@ description: Flutter/Dart 项目的技术栈惯例。在 Flutter 项目里写代
 
 # Flutter 技术栈惯例
 
+下文的 `${CLAUDE_PLUGIN_ROOT}` 指当前技能所在的插件根目录。如果它没有被替换成绝对路径（如在 Codex 中），从已加载的 `SKILL.md` 路径向上三级定位，执行命令时直接代入绝对路径。
+
 只放**任何 Flutter 项目都成立**的做法。状态管理选型（Bloc/Riverpod/…）、目录分层、默认验证哪些平台属于项目约定，读项目的 `docs/` 和「工作流配置」。
 
 ## 与官方 Dart and Flutter 插件的分工

@@ -5,6 +5,8 @@ description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，�
 
 # 初始化项目工作流配置与文档骨架
 
+下文的 `${CLAUDE_PLUGIN_ROOT}` 指当前技能所在的插件根目录。如果它没有被替换成绝对路径（如在 Codex 中），从已加载的 `SKILL.md` 路径向上三级定位，执行命令时直接代入绝对路径。
+
 目标：自动识别项目情况，**只问识别不了的**，生成项目根目录的「工作流配置」`ai-workflow.yaml`，在 Agent 入口文件留一行指针，并补齐流程需要的文档骨架。配置和文档按项目写一次、提交进 git，团队共用。
 
 流程说明（三档、拆解、交接、交付等）由插件技能承载，**不**在项目里生成 `ai-workflow.md` 一类的流程文档；项目里只放项目事实。
@@ -57,7 +59,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 1. 按 `${CLAUDE_PLUGIN_ROOT}/templates/ai-workflow.yaml` 的结构生成配置：保留模板头部的格式说明注释，删掉示例值，不适用的写“无”，未确认的写“待确认”。只写脚本和技能能直接取用的事实；规则类说明（如“iOS 仅在明确要求时验证”的理由）留在项目 `docs/`，不写进配置。
 2. 先展示「配置项 | 值 | 依据」表和将要写入的文件全文，等用户确认。
 3. 写入项目根目录 `ai-workflow.yaml`，然后在 Agent 入口文件加一行指针（如“工作流配置：根目录 `ai-workflow.yaml`”）：
-   - 已有 `AGENTS.md` 写 `AGENTS.md`；只有 `CLAUDE.md` 写 `CLAUDE.md`；`CLAUDE.md` 只是 `@AGENTS.md` 引用时写 `AGENTS.md`。
+   - 优先写 `AGENTS.md`。在 Codex 中缺少它时新建；在 Claude Code 中，若项目只有独立的 `CLAUDE.md`，可更新该文件。
    - 两者都没有：新建 `AGENTS.md`，并询问是否同时新建只含 `@AGENTS.md` 的 `CLAUDE.md`。
    - 写入前用 `git check-ignore -v <文件>` 检查 `ai-workflow.yaml`、入口文件和 `docs/` 是否被忽略；被忽略时团队拿不到配置，先告诉用户命中的规则，由用户决定改 `.gitignore` 还是换位置，不擅自修改。
 4. 写完运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root . --check-config`：解析错误（退出码 2）或路径不存在必须修正后再交付。
@@ -97,7 +99,9 @@ docs/development/handoffs/<task-id>.md  handoff 首次跨会话交接时
 
 ## 5. 插件建议（可选）
 
-根据识别结果给出建议的插件组合，例如 `flutter + pixso + apifox` → `preset-flutter-pixso-apifox`；没有对应 preset 时列出 `workflow-core` + 对应维度插件，并说明哪些维度暂时没有插件。
+在 Codex 中，列出 `workflow-core` 和需要的维度插件，给出 README 的 Codex 安装入口。
+
+在 Claude Code 中，根据识别结果给出建议的插件组合，例如 `flutter + pixso + apifox` → `preset-flutter-pixso-apifox`；没有对应 preset 时列出 `workflow-core` + 对应维度插件，并说明哪些维度暂时没有插件。
 
 用户同意后，再在 `.claude/settings.json` 写入 `extraKnownMarketplaces` 和 `enabledPlugins`，让团队成员打开项目时收到安装提示：已有文件时合并，不覆盖其他设置。
 
@@ -106,6 +110,6 @@ docs/development/handoffs/<task-id>.md  handoff 首次跨会话交接时
 ## 6. 收尾
 
 - 不提交、不推送；告诉用户改了哪些文件，并建议提交，这样团队共用同一份配置和文档。
-- 提示下一步：有 PRD 时运行 `/workflow-core:prd-breakdown` 拆解，它会生成模块卡。
+- 提示下一步：有 PRD 时用 `workflow-core:prd-breakdown` 技能拆解并生成模块卡。
 - 发现项目文档里还保留着和插件重复的流程正文（三档、交接、交付格式等）时，列出位置并建议迁移：插件里已有的段落改成“见 `workflow-core:<技能>`”，只保留项目特有内容。是否迁移由用户决定，本技能不自动删改。
 - 按 `deliver` 的五项格式汇报。

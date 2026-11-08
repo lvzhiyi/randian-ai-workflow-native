@@ -1,0 +1,90 @@
+{
+  "description": "工作流入口、交付提醒和可选的本机执行轨迹",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/workflow_gate.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^(Bash|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/workflow_gate.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/workflow_gate.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

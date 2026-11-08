@@ -20,6 +20,12 @@ def args(**extra):
 
 
 class RuleTests(unittest.TestCase):
+    def test_codex_report_labels_unavailable_trigger_rate(self):
+        output = report.render(args(), 'sample', None, [review(['docs/ui.md'])], [])
+        self.assertIn('Codex 暂无技能触发率数据', output)
+        self.assertIn('规则命中表', output)
+        self.assertNotIn('review 触发率低于', output)
+
     def test_actions_follow_hits_and_outcomes(self):
         reviews = [review(['a.md'], [('a.md 注释', '应修'), ('a.md 颜色', '应修'), ('b.md 少', '建议')]) for _ in range(3)]
         reviews[0]['findings'].pop()

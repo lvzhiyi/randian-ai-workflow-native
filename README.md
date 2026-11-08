@@ -1,6 +1,6 @@
 # ai-dev-workflow
 
-AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“需求 PRD → 拆解 → 开工 → 实施 → 验证 → 交付”的流程沉淀成可复用的技能，按**通用流程 / 技术栈 / 设计工具 / 接口工具**四个维度拆成插件，各项目按需组合安装。
+面向 Codex 和 Claude Code 的 AI 协作开发工作流插件集。把“需求 PRD → 拆解 → 开工 → 实施 → 验证 → 交付”的流程沉淀成可复用的技能，按**通用流程 / 技术栈 / 设计工具 / 接口工具**四个维度拆成插件，各项目按需组合安装。
 
 > 提炼自 `course_student_app`（Flutter + Pixso + Apifox）的实际工作流。
 
@@ -19,11 +19,11 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 | **两步接入** | 装插件后运行 `init`，自动探测项目并生成结构化配置和文档骨架，只问探测不出来的项 | `/workflow-core:init` |
 | **中断可恢复** | 进度快照写进仓库，换会话、换人、换 Agent 都能按固定步骤接着做 | `handoff` |
 | **规则不打架** | 流程在插件、事实在项目，同一条规则只保留一处；skill 按需加载，不占常驻上下文 | [规则优先级](#插件一览) |
-| **数据留在本机** | 轨迹和度量只写本机，不进 git；度量只存枚举、计数和规则名，不存代码和命令 | `~/.claude/` |
+| **数据留在本机** | 轨迹和度量只写本机。度量只存枚举、计数和规则名 | Codex 的 `$CODEX_HOME`（默认 `~/.codex/`）或 `~/.claude/` |
 
 ### 执行过程一目了然
 
-运行 `/workflow-core:trace on`，打开输出的本地地址，就能边执行边看：哪些步骤正在运行、用了多久、结果如何，还会检查改动之后有没有真的跑过分析和测试。用完运行 `/workflow-core:trace off` 关闭。
+在 Codex 中用 `$workflow-core:trace on`，在 Claude Code 中用 `/workflow-core:trace on`。打开输出的本地地址，可以看到工具步骤及验证覆盖情况。用完把参数改成 `off` 关闭。
 
 ![实时执行轨迹页面：显示 Skill、MCP、验证、改动、子代理的统计，检查项和按对话分组的时间线](docs/images/trace-live.png)
 
@@ -47,7 +47,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 | `stack-flutter` | 技术栈 | 版本核对、默认检查脚本、Stop 钩子兜底静态分析、平台验证口径、评审清单、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
-| `preset-flutter-pixso-apifox` | 组合包 | 依赖以上四个 + 官方 `context7`、`superpowers`、`dart-flutter`（Dart and Flutter），一次装齐 |
+| `preset-flutter-pixso-apifox` | Claude Code 组合包 | 依赖以上四个 + 官方 `context7`、`superpowers`、`dart-flutter`（Dart and Flutter），一次装齐 |
 
 ```mermaid
 flowchart TB
@@ -217,14 +217,41 @@ flowchart LR
 
 ## 安装
 
-### 1. 添加 marketplace
+### Codex
+
+在本仓库根目录执行。以下命令已用 Codex CLI 0.163.0 验证：
+
+```bash
+codex plugin marketplace add "$PWD"
+codex plugin add workflow-core@ai-dev-workflow
+# Flutter + Pixso + Apifox 项目再装以下三个，可按需选装
+codex plugin add stack-flutter@ai-dev-workflow
+codex plugin add design-pixso@ai-dev-workflow
+codex plugin add api-apifox@ai-dev-workflow
+```
+
+Codex 共用此仓库的 marketplace，四个插件各自提供 `.codex-plugin/plugin.json`。按需单独配置 Context7、Superpowers 和官方 Dart and Flutter，Apifox CLI 也需单独安装登录。Pixso MCP 已随 `design-pixso` 声明，首次使用按提示授权。
+
+打开目标项目并新建 Codex 会话。在 CLI 的 `/hooks` 或桌面端的 **Settings → Hooks** 检查并信任要启用的钩子。首次接入时用 `$workflow-core:init` 生成 `ai-workflow.yaml` 和文档骨架，已有配置的项目直接用 `$workflow-core:workflow`。下文 Claude Code 的技能命令可在 Codex 中使用同名的 `$插件名:技能名`。
+
+- **交付提醒**在已接入工作流的项目生效。检测到代码编辑后，回合结束时最多提醒一次，下一次编辑后重新检查。Shell 写入按命令文本推断，在子目录运行的相对路径命令可能漏记。Flutter 静态分析由独立的 Stop 钩子负责，发现错误时请求继续一轮。
+- **执行轨迹**默认关闭，使用 `$workflow-core:trace on` 开启。Codex 版实时展示工具调用、补丁和验证，技能加载事件可能不出现在轨迹中。历史会话 HTML 导出读取 Claude Code 的会话格式。
+- **流程度量**使用 `$workflow-core:metrics` 汇总评审、交付和 Flutter 拦截记录。技能触发率及据此推导的规则删除候选目前仅由 Claude Code 会话数据提供。
+
+轨迹开关需要访问本机回环地址并写入 Codex 数据目录。沙盒拦截时，可在普通本地终端执行 [trace 技能](plugins/workflow-core/skills/trace/SKILL.md)中的命令。评审与交付度量的写入失败会单独报告。
+
+参见 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins) 和 [Codex 钩子文档](https://learn.chatgpt.com/docs/hooks)。
+
+### Claude Code
+
+#### 1. 添加 marketplace
 
 ```bash
 # 团队成员：从 GitHub 仓库添加
 claude plugin marketplace add lvzhiyi/randian-ai-workflow-native
 ```
 
-### 2. 安装插件
+#### 2. 安装插件
 
 **先选安装范围**：插件只在启用它的范围内生效。
 
@@ -265,7 +292,7 @@ claude plugin marketplace add flutter/agent-plugins
 
 > `dart-flutter` 也出现在内置的 Anthropic 插件目录里，但 CLI 无法按名称从内置目录解析它，所以依赖指向它自己的 marketplace。
 
-### 3. 额外前置（插件无法代装）
+### 额外前置
 
 - **Apifox CLI 与官方技能**：按 [Apifox CLI 安装指南](https://apifox.com/apifox-cli-installation-guide.md) 安装登录，令牌只留在本机。
 - **Pixso MCP**：`design-pixso` 已内置 `https://pixso.cn/mcp`，首次调用按提示授权。用户级已配过同名 Pixso MCP 的，删掉一处避免工具重复。
@@ -324,7 +351,7 @@ flowchart LR
 
 **术语表**：`docs.glossary` 指向项目术语表（默认 `docs/product/术语表.md`），不放进配置。`init` 只建骨架；`prd-breakdown` 遇到含糊词提议入表，`review` 检查命名是否符合词条，用户确认后才写入。
 
-### 2. 让团队成员打开项目就收到安装提示
+### 2. 让 Claude Code 团队成员打开项目就收到安装提示
 
 在项目 `.claude/settings.json` 写入：
 
@@ -385,7 +412,8 @@ ai-dev-workflow/
 ├── .claude-plugin/marketplace.json     # marketplace 清单 + 跨 marketplace 白名单
 └── plugins/
     ├── workflow-core/
-    │   ├── .claude-plugin/plugin.json
+    │   ├── .claude-plugin/plugin.json 和 .codex-plugin/plugin.json
+    │   ├── hooks/hooks.json 和 hooks/codex.json
     │   ├── skills/<阶段>/SKILL.md       # 每个阶段一个技能
     │   ├── skills/init/detect.sh        # init 用的只读项目探测脚本
     │   ├── scripts/check_docs.py        # 文档规范检查（链接/锚点、任务卡字段、待确认格式）
@@ -393,13 +421,13 @@ ai-dev-workflow/
     ├── stack-flutter/
     │   ├── scripts/flutter_check.py     # 默认检查：格式 + analyze + 测试
     │   ├── scripts/stop_analyze.py      # Stop 钩子脚本
-    │   └── hooks/hooks.json             # 注册 Stop 钩子
+    │   └── hooks/                       # 两个客户端各自的 Stop 钩子配置
     ├── design-pixso/                    # 含 .mcp.json
     ├── api-apifox/
     └── preset-flutter-pixso-apifox/     # 只有 plugin.json 的 dependencies
 ```
 
-- **边改边用**：本地路径添加的 marketplace 不受 `version` 锁定，改完 SKILL.md 在会话里执行 `/reload-plugins` 即生效；临时调试也可以 `claude --plugin-dir ./plugins/workflow-core`。
+- **边改边用**：Claude Code 本地 marketplace 修改后可执行 `/reload-plugins`，临时调试也可用 `claude --plugin-dir ./plugins/workflow-core`。Codex 本地插件修改后重新安装并打开新会话，钩子脚本变更后在 Hooks 中重新审核。
 - **校验**：提交前运行插件校验和脚本单测。
 
   ```bash
@@ -424,7 +452,7 @@ ai-dev-workflow/
 | `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式、术语表词条；路径读 `ai-workflow.yaml`，可用参数覆盖；`--check-config` 检查配置路径 |
 | `workflow-core/scripts/trace_hook.py`、`trace_server.py` | 可选的执行轨迹：钩子把工具调用写入本机日志，本地页面实时展示；默认关闭 | `trace` 技能、`hooks/hooks.json` |
 | `workflow-core/scripts/workflow_metric.py` | 把评审、交付结论写成结构化度量（只存枚举、计数和规则名，默认开启；`off` 关闭），`stack-flutter` 的 Stop 钩子写入同一文件 | `review`、`deliver` 技能 |
-| `workflow-core/scripts/workflow_gate.py` | 触发兜底：接入项目的会话开始时说明工作流入口，改了代码却没 `deliver` 时在回合结束提醒一次；只提醒不阻断，`~/.claude/workflow-gate/disabled` 可关闭 | `hooks/hooks.json` |
+| `workflow-core/scripts/workflow_gate.py` | 触发兜底：接入项目的会话开始时说明工作流入口，代码改动后缺交付时在回合结束提醒。可在客户端数据目录的 `workflow-gate/` 下创建 `disabled` 文件关闭 | `hooks/hooks.json`、`hooks/codex.json` |
 | `workflow-core/scripts/metrics_report.py` | 汇总触发率、评审阻塞、拦截、待验证比例，生成规则命中表和删除候选（只读） | `metrics` 技能 |
 | `workflow-core/scripts/workflow_trace.py` | 从 Claude Code 会话记录事后生成单页轨迹 | 手动运行 |
 | `workflow-core/scripts/workflow_config.py` | 解析与校验 `ai-workflow.yaml`（YAML 受限子集） | `prd-breakdown`、`verify` 技能；项目 CI |
@@ -447,7 +475,7 @@ flowchart LR
 - uses: actions/checkout@v4
   with:
     repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.12.0
+    ref: workflow-core--v0.13.0
     path: .ai-workflow
 - run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
 ```
@@ -484,7 +512,3 @@ python3 -m unittest discover -s plugins/stack-flutter/scripts -p 'test_*.py'
 | 集成测试 | `workflow-core:integration-test`：从任务卡验收场景生成测试用例 → 环境与数据准备 → 执行 → 结果回写卡片；Apifox 场景执行放 `api-apifox` | 规划中 |
 | 其他技术栈 | `stack-react`、`stack-vue` | 有对应项目时再建 |
 | 其他设计工具 | `design-figma`（官方 `figma` 插件可作依赖） | 有对应项目时再建 |
-
-## 与 Codex 的兼容
-
-`AGENTS.md` 两边通用；`SKILL.md` 格式 Codex 也能读取，可把 `plugins/*/skills/` 链接到 Codex 的技能目录复用。插件清单、依赖、`.mcp.json` 和钩子只在 Claude Code 中生效。
