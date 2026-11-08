@@ -219,16 +219,18 @@ flowchart LR
 
 ### Codex
 
-在本仓库根目录执行。以下命令已用 Codex CLI 0.163.0 验证：
+在任意目录执行。Codex 会从 GitHub 的 `main` 分支拉取插件目录。
 
 ```bash
-codex plugin marketplace add "$PWD"
+codex plugin marketplace add lvzhiyi/randian-ai-workflow-native --ref main
 codex plugin add workflow-core@ai-dev-workflow
 # Flutter + Pixso + Apifox 项目再装以下三个，可按需选装
 codex plugin add stack-flutter@ai-dev-workflow
 codex plugin add design-pixso@ai-dev-workflow
 codex plugin add api-apifox@ai-dev-workflow
 ```
+
+如果之前注册过同名的本地源，先用 `codex plugin marketplace list` 确认，再执行 `codex plugin marketplace remove ai-dev-workflow`，然后运行上面的安装命令。
 
 Codex 共用此仓库的 marketplace，四个插件各自提供 `.codex-plugin/plugin.json`。按需单独配置 Context7、Superpowers 和官方 Dart and Flutter，Apifox CLI 也需单独安装登录。Pixso MCP 已随 `design-pixso` 声明，首次使用按提示授权。
 
