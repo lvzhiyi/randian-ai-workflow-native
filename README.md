@@ -223,11 +223,6 @@ flowchart LR
 claude plugin marketplace add lvzhiyi/randian-ai-workflow-native
 ```
 
-```bash
-# 维护者本地开发：从本地目录添加，插件就地加载，改完 /reload-plugins 即生效
-claude plugin marketplace add /Users/lv/work/randian/ai-dev-workflow
-```
-
 ### 2. 安装插件
 
 **先选安装范围**：插件只在启用它的范围内生效。
