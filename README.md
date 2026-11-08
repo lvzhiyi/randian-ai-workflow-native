@@ -12,6 +12,7 @@ AI 协作开发工作流插件集（Claude Code plugin marketplace）。把“�
 | --- | --- | --- |
 | **数据驱动进化** | 自动积累技能触发率、评审命中、钩子拦截和「待验证」比例，算出哪些规则有效、哪些该改、哪些可以删。只给候选，去留由人决定，安全类规则受保护 | `/workflow-core:metrics` |
 | **执行过程可视化** | 实时显示 AI 正在调用的 Skill、MCP、验证命令、子代理和结果，告别黑盒；默认关闭，按需开启 | `/workflow-core:trace on` |
+| **流程不靠自觉** | 技能不触发时有钩子兜底：会话开始说明入口，改了代码却没走交付，回合结束前自动提醒 | 接入 `init` 后自动生效 |
 | **全程可控** | 按风险分轻量、标准、完整三档，流程成本和风险对齐；完整档先批准再分段实施；提交、发布、写入外部系统都要明确授权 | `tiering`、`implement` |
 | **结果可检测** | Stop 钩子在 AI 结束回合前拦下分析错误；Spec + Standards 双轴评审；验证失败必须分类；本地和 CI 跑同一份文档检查，工具缺失报「受阻」而不是「通过」 | `verify`、`review`、`deliver` |
 | **扩展到任意技术栈** | 通用流程与技术栈无关；技术栈、设计工具、接口工具各是独立维度，加一个 `stack-*` 插件就能接入新技术栈。目前内置 Flutter + Pixso + Apifox | [扩展指南](#扩展新增阶段技术栈或工具) |
@@ -423,6 +424,7 @@ ai-dev-workflow/
 | `workflow-core/scripts/check_docs.py` | 只读检查文档本地链接与锚点、任务卡必填字段、「待确认」五段格式、术语表词条；路径读 `ai-workflow.yaml`，可用参数覆盖；`--check-config` 检查配置路径 |
 | `workflow-core/scripts/trace_hook.py`、`trace_server.py` | 可选的执行轨迹：钩子把工具调用写入本机日志，本地页面实时展示；默认关闭 | `trace` 技能、`hooks/hooks.json` |
 | `workflow-core/scripts/workflow_metric.py` | 把评审、交付结论写成结构化度量（只存枚举、计数和规则名，默认开启；`off` 关闭），`stack-flutter` 的 Stop 钩子写入同一文件 | `review`、`deliver` 技能 |
+| `workflow-core/scripts/workflow_gate.py` | 触发兜底：接入项目的会话开始时说明工作流入口，改了代码却没 `deliver` 时在回合结束提醒一次；只提醒不阻断，`~/.claude/workflow-gate/disabled` 可关闭 | `hooks/hooks.json` |
 | `workflow-core/scripts/metrics_report.py` | 汇总触发率、评审阻塞、拦截、待验证比例，生成规则命中表和删除候选（只读） | `metrics` 技能 |
 | `workflow-core/scripts/workflow_trace.py` | 从 Claude Code 会话记录事后生成单页轨迹 | 手动运行 |
 | `workflow-core/scripts/workflow_config.py` | 解析与校验 `ai-workflow.yaml`（YAML 受限子集） | `prd-breakdown`、`verify` 技能；项目 CI |
@@ -445,7 +447,7 @@ flowchart LR
 - uses: actions/checkout@v4
   with:
     repository: lvzhiyi/randian-ai-workflow-native
-    ref: workflow-core--v0.11.0
+    ref: workflow-core--v0.12.0
     path: .ai-workflow
 - run: python3 .ai-workflow/plugins/workflow-core/scripts/check_docs.py --root .
 ```
