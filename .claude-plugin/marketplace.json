@@ -7,7 +7,7 @@
     {
       "name": "workflow-core",
       "source": "./plugins/workflow-core",
-      "description": "通用开发流程：项目接入初始化、三档分级、PRD 拆解、开工检查、分段实施、验证失败分类、双轴代码评审、统一交付、中断交接"
+      "description": "通用开发流程：项目接入初始化、三档分级、PRD 拆解、开工检查、分段实施、验证失败分类、双轴代码评审、统一交付、中断交接、可选的实时执行轨迹"
     },
     {
       "name": "stack-flutter",
