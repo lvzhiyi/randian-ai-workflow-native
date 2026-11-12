@@ -1,7 +1,7 @@
 {
   "name": "workflow-core",
   "displayName": "Workflow Core",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "技术栈无关的 AI 协作开发流程：项目接入初始化、三档分级、PRD 拆解、开工检查、分段实施、验证失败分类、双轴代码评审、统一交付、中断交接、可选的实时执行轨迹",
   "author": { "name": "吕治易" },
   "license": "UNLICENSED",
