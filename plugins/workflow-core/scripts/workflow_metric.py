@@ -23,7 +23,7 @@ from trace_hook import is_codex, redact, workflow_home  # noqa: E402
 TIERS = ('轻量', '标准', '完整')
 AXES = ('spec', 'standards')
 SEVERITIES = ('阻塞', '应修', '建议')
-STATUSES = ('实施完成，待验证', '可评审', '可合并', '已上线', '受阻')
+STATUSES = ('实施完成，待验证', '可评审', '自测完成', '受阻')
 UNVERIFIED = ('本次回归', '环境或工具问题', '既有失败', '原因待定位', '需求或接口不明确', '超出范围', '尝试无进展', '按约定未执行')
 REVIEW_STATES = ('已评审', '已跳过', '不要求')
 OUTCOMES = ('已修复', '接受例外', '未解决')
