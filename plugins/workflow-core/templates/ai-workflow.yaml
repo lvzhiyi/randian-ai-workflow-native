@@ -11,6 +11,9 @@
 
 version: 1
 
+engine:
+  enabled: false                          # true 启用 Codex 权威状态查询，不表示工具防绕过
+
 docs:
   product_root: docs/product
   home: docs/product/项目首页.md

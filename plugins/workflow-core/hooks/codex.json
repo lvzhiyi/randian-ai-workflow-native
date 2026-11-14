@@ -1,5 +1,5 @@
 {
-  "description": "工作流入口、交付提醒和可选的本机执行轨迹",
+  "description": "工作流入口、可选严格引擎状态查询、交付提醒和本机执行轨迹",
   "hooks": {
     "SessionStart": [
       {

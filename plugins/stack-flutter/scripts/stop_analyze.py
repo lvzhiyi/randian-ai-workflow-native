@@ -51,7 +51,7 @@ def analyze_errors(root, files):
 
     参数 [root]：项目根；[files]：相对路径列表。
     返回：问题描述列表，形如「lib/a.dart:12:3 错误信息 (诊断码)」；
-    分析器不可用、超时或启动失败时返回 None，表示无法判断（调用方放行）。
+    分析器不可用、超时、启动失败或非零退出且没有可解析诊断时返回 None，表示无法判断。
     machine 格式每行为：SEVERITY|TYPE|CODE|FILE|LINE|COLUMN|LENGTH|MESSAGE。
     """
     if not shutil.which('dart'):
@@ -63,13 +63,20 @@ def analyze_errors(root, files):
     except (OSError, subprocess.TimeoutExpired):
         return None
     errors = []
+    has_diagnostics = False
     for line in (result.stdout + '\n' + result.stderr).splitlines():
         parts = line.split('|', 7)
-        if len(parts) == 8 and parts[0] == 'ERROR':
+        if (len(parts) != 8 or parts[0] not in ('ERROR', 'WARNING', 'INFO', 'HINT')
+                or not all(parts[index] for index in (1, 2, 3))
+                or not all(parts[index].isdigit() for index in (4, 5, 6))):
+            continue
+        has_diagnostics = True
+        if parts[0] == 'ERROR':
             path = Path(parts[3])
             shown = path.relative_to(root) if path.is_absolute() and root in path.parents else path
             errors.append(f'{shown}:{parts[4]}:{parts[5]} {parts[7]} ({parts[2].lower()})')
-    return errors
+    # 非零退出也可能仅有警告；只有缺少有效诊断时才视为分析器故障。
+    return None if result.returncode != 0 and not has_diagnostics else errors
 
 
 def record_metric(event, root, outcome, errors):

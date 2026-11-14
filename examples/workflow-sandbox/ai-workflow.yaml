@@ -1,0 +1,26 @@
+# 恢复已批准模拟范围的配置；必要工具缺失仍为受阻。
+version: 1
+docs:
+  product_root: docs/product
+  home: docs/product/项目首页.md
+  requirements: PRD.md
+  cards_dir: docs/product/任务
+  overview: docs/product/任务/版本任务总览.md
+  dev_docs: docs/development
+spec:
+  tool: none
+review:
+  base_branch: main
+design:
+  tool: 无
+api:
+  tool: 无
+notes:
+  - 该目录属于父仓库，Git 操作必须限定子目录路径
+  - 必要检查包含 Ruff；工具缺失时完整验证返回 BLOCKED
+verify:
+  docs: PYTHONDONTWRITEBYTECODE=1 python3 scripts/check.py docs
+  light: PYTHONDONTWRITEBYTECODE=1 python3 scripts/check.py all
+  standard: PYTHONDONTWRITEBYTECODE=1 python3 scripts/check.py all
+  full:
+    - PYTHONDONTWRITEBYTECODE=1 python3 scripts/check.py all

@@ -20,9 +20,10 @@ CONFIG_FILE = 'ai-workflow.yaml'
 PLACEHOLDERS = ('待确认', '无')
 
 # 配置结构：段名 → {键名: 类型}；类型 'str' 字符串，'path' 相对项目根的路径，
-# 'list' 字符串列表，'cmd' 单条命令或命令列表，'enum:a|b' 枚举。
+# 'list' 字符串列表，'cmd' 单条命令或命令列表，'bool' 布尔值，'enum:a|b' 枚举。
 SCHEMA = {
     'version': 'version',
+    'engine': {'enabled': 'bool'},
     'docs': {
         'product_root': 'path', 'home': 'path', 'requirements': 'path', 'cards_dir': 'path',
         'overview': 'path', 'design_index': 'path', 'dev_docs': 'path', 'glossary': 'path',
@@ -174,11 +175,14 @@ def _type_error(kind, value):
     """检查 [value] 是否符合类型 [kind]；返回错误说明，符合时返回 None。"""
     if value is None:
         return None
+    if kind == 'bool':
+        return None if isinstance(value, bool) else '应为布尔值 true / false'
     if kind == 'list':
-        ok = isinstance(value, list)
+        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
         return None if ok else '应为字符串列表（逐行 “- 值”）'
     if kind == 'cmd':
-        ok = isinstance(value, str) or isinstance(value, list)
+        ok = isinstance(value, str) or (
+            isinstance(value, list) and all(isinstance(item, str) for item in value))
         return None if ok else '应为一条命令或命令列表'
     if kind.startswith('enum:'):
         options = kind[5:].split('|')
@@ -240,7 +244,10 @@ class Config:
             if not isinstance(value, dict) or value.get(part) is None:
                 return default
             value = value[part]
-        return value.rstrip('/') if isinstance(value, str) else value
+        rule = SCHEMA
+        for part in dotted.split('.'):
+            rule = rule.get(part) if isinstance(rule, dict) else None
+        return value.rstrip('/') if rule == 'path' and isinstance(value, str) else value
 
     def missing_paths(self):
         """列出配置里写了但在项目中不存在的路径。

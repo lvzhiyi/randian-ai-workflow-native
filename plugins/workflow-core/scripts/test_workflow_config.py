@@ -89,6 +89,32 @@ class SchemaTests(unittest.TestCase):
         self.assertIn('verify.full', text)
         self.assertIn('extra', text)
 
+    def test_list_and_command_items_must_be_strings(self):
+        for key in ('notes', 'platforms.default', 'verify.full'):
+            for invalid in (True, False, 1, None, {}, []):
+                with self.subTest(key=key, invalid=invalid):
+                    section, _, sub = key.partition('.')
+                    value = ['valid', invalid]
+                    data = {'version': '1', section: {sub: value} if sub else value}
+                    self.assertTrue(any(key in error for error in workflow_config.validate(data)))
+        self.assertEqual(workflow_config.validate(parse(
+            'version: 1\nnotes:\n  - "true"\nverify:\n  full:\n    - "false"\n')), [])
+
+    def test_engine_accepts_only_enabled_boolean(self):
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                self.assertEqual(workflow_config.validate(
+                    {'version': '1', 'engine': {'enabled': enabled}}), [])
+        for invalid in ('true', 'false', 0, 1, [], {}):
+            with self.subTest(invalid=invalid):
+                errors = workflow_config.validate({'version': '1', 'engine': {'enabled': invalid}})
+                self.assertTrue(any('engine.enabled' in error for error in errors))
+        self.assertTrue(any('engine.extra' in error for error in workflow_config.validate(
+            {'version': '1', 'engine': {'extra': True}})))
+        for raw in ('true', 'false'):
+            self.assertEqual(workflow_config.validate(parse(
+                f'version: 1\nengine:\n  enabled: {raw}\n')), [])
+
     def test_missing_version_is_error(self):
         self.assertTrue(any('version' in e for e in workflow_config.validate({'docs': {}})))
 
@@ -115,6 +141,20 @@ class LoadTests(unittest.TestCase):
         config = workflow_config.load(self.root)
         self.assertEqual(config.source, 'ai-workflow.yaml')
         self.assertEqual(config.get('docs.product_root'), 'yaml/product')
+
+    def test_get_strips_trailing_slashes_only_for_paths(self):
+        config = workflow_config.Config({
+            'docs': {'product_root': 'docs/product///'},
+            'code_rules_doc': 'docs/rules/',
+            'verify': {'standard': 'tool output/', 'full': ['tool output/']},
+            'review': {'base_branch': 'feature/'},
+        }, 'test', self.root)
+        self.assertEqual(config.get('docs.product_root'), 'docs/product')
+        self.assertEqual(config.get('code_rules_doc'), 'docs/rules')
+        self.assertEqual(config.get('verify.standard'), 'tool output/')
+        self.assertEqual(config.get('verify.full'), ['tool output/'])
+        self.assertEqual(config.get('review.base_branch'), 'feature/')
+        self.assertEqual(config.get('docs.home', 'fallback/'), 'fallback/')
 
     def test_no_config_is_empty(self):
         config = workflow_config.load(self.root)

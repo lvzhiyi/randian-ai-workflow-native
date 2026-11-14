@@ -114,6 +114,40 @@ class FlutterCheckMainTests(RepoTestCase):
         self.assertEqual(calls[-1][1][-1], 'test/x_test.dart')
 
 
+class AnalyzeErrorsTests(unittest.TestCase):
+    def test_nonzero_without_machine_diagnostics_is_unknown(self):
+        root = Path('/project')
+        for output in ('', 'Analyzer crashed', 'ERROR|bad',
+                       'ERROR|COMPILE_TIME_ERROR|BAD|lib/a.dart|x|1|1|bad'):
+            with self.subTest(output=output), patch.object(stop_analyze.shutil, 'which', return_value='/dart'), patch.object(
+                stop_analyze.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', output)
+            ):
+                self.assertIsNone(stop_analyze.analyze_errors(root, ['lib/a.dart']))
+
+    def test_nonzero_warning_and_hint_diagnostics_have_no_errors(self):
+        for severity in ('WARNING', 'INFO', 'HINT'):
+            for stream in ('stdout', 'stderr'):
+                diagnostic = f'{severity}|HINT|CODE|lib/a.dart|1|2|3|message'
+                result = subprocess.CompletedProcess([], 1, diagnostic if stream == 'stdout' else '',
+                                                     diagnostic if stream == 'stderr' else '')
+                with self.subTest(severity=severity, stream=stream), patch.object(
+                    stop_analyze.shutil, 'which', return_value='/dart'
+                ), patch.object(stop_analyze.subprocess, 'run', return_value=result):
+                    self.assertEqual(stop_analyze.analyze_errors(Path('/project'), ['lib/a.dart']), [])
+
+    def test_machine_error_and_clean_exit(self):
+        for result, expected in (
+            (subprocess.CompletedProcess([], 0, '', ''), []),
+            (subprocess.CompletedProcess([], 3,
+             'ERROR|COMPILE_TIME_ERROR|BAD|/project/lib/a.dart|1|2|3|bad', ''),
+             ['lib/a.dart:1:2 bad (bad)']),
+        ):
+            with self.subTest(result=result), patch.object(stop_analyze.shutil, 'which', return_value='/dart'), patch.object(
+                stop_analyze.subprocess, 'run', return_value=result
+            ):
+                self.assertEqual(stop_analyze.analyze_errors(Path('/project'), ['lib/a.dart']), expected)
+
+
 class StopHookTests(RepoTestCase):
     def hook(self, event, errors=None):
         out = io.StringIO()
@@ -154,6 +188,19 @@ class StopHookTests(RepoTestCase):
         self.assertEqual(self.outcomes(), [])
         (Path(self.metrics.name) / 'disabled').touch()
         self.hook({'cwd': str(self.root)}, ['e'])
+        self.assertEqual(self.outcomes(), [])
+
+    def test_analyzer_failure_on_retry_does_not_record_fixed(self):
+        self.write('lib/a.dart', 'broken(')
+        event = {'cwd': str(self.root), 'stop_hook_active': True}
+        out = io.StringIO()
+        with patch.object(stop_analyze, 'project_root', return_value=self.root), patch.object(
+            stop_analyze, 'changed_dart_files', return_value=['lib/a.dart']
+        ), patch.object(stop_analyze.shutil, 'which', return_value='/dart'), patch.object(
+            stop_analyze.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'Analyzer crashed')
+        ), patch('sys.stdin', io.StringIO(json.dumps(event))), contextlib.redirect_stdout(out):
+            self.assertEqual(stop_analyze.main(), 0)
+        self.assertEqual(out.getvalue(), '')
         self.assertEqual(self.outcomes(), [])
 
     def test_errors_ask_claude_to_continue(self):

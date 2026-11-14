@@ -131,6 +131,16 @@ def handle(event, root):
     if (root / 'disabled').exists() or not SESSION_ID.match(session_id) or not project_uses_workflow(event.get('cwd')):
         return
     name = event.get('hook_event_name')
+    if is_codex():
+        from engine_codex import context
+        try:
+            engine_context = context(event)
+        except Exception:
+            engine_context = 'ENGINE_BLOCKED：项目配置或引擎不可用，不能确认完成。'
+        if engine_context is not None:
+            if engine_context:
+                print(json.dumps({'systemMessage': engine_context}, ensure_ascii=False))
+            return
     if name == 'SessionStart':
         if root.is_dir():
             prune(root)
