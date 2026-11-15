@@ -1,0 +1,13 @@
+{
+  "name": "ai-dev-workflow",
+  "owner": {
+    "name": "吕治易"
+  },
+  "plugins": [
+    {
+      "name": "workflow-core",
+      "source": "./plugins/workflow-core",
+      "description": "任务级工作流：人工授权、共享引擎门禁、只读看板与执行观测"
+    }
+  ]
+}

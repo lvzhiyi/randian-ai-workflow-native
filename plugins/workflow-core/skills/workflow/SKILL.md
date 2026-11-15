@@ -7,6 +7,12 @@ description: 任务级工作流总入口。开发、文档、Bug、重构或续�
 
 `${CLAUDE_PLUGIN_ROOT}` 指本技能所在插件根目录；未替换时从 `SKILL.md` 向上三级定位，命令代入绝对路径。项目根与插件根不要混淆。
 
+## Cursor 宿主
+
+Cursor 使用 `${CURSOR_PLUGIN_ROOT}` 定位插件；执行本插件引擎 CLI 前每次显式添加 `WORKFLOW_HOST=cursor`，使用插件脚本绝对路径和项目 `--root`。不要依赖 hook 子进程为后续 Shell 设置环境。数据库沿用共享默认位置，不承诺宿主隔离。Cursor conversation_id 对应 bind-executor 的 session；多根由 CURSOR_PROJECT_DIR 或 Shell working_directory 明确选择。
+
+Cursor AskQuestion 不能作为批准回执；人工在交互终端运行 confirm-tier，完整档另运行 approve-proposal（当前 control_digest）。Read 输出不能自动登记基线，必须 CLI read-baseline。Task 放行只验证父任务，子 Agent 的工具回调和会话绑定须独立核实，不承诺全写路径覆盖。看板 CLI 同样加 `WORKFLOW_HOST=cursor`，轨迹读取 `~/.cursor/workflow-trace`。详情见仓库 `docs/development/cursor-adapter.md`；当前未做真实 Cursor E2E。
+
 ## 规则与输入
 
 优先级：用户本次指令 > 项目 `AGENTS.md` / `CLAUDE.md`、`ai-workflow.yaml` 与 `docs/` > 维度插件 > 本插件 > 其他通用技能。冲突先说明，不暗中增加文档、审批或删减检查。

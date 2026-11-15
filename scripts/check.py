@@ -32,7 +32,8 @@ def main():
             json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             failures.append("INVALID_JSON:" + str(path.relative_to(ROOT)))
-    for path in ROOT.glob(".claude-plugin/*.json"):
+    for path in [*ROOT.glob(".claude-plugin/*.json"), *ROOT.glob(".cursor-plugin/*.json"),
+                 *ROOT.glob("plugins/**/hooks/cursor.json")]:
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):

@@ -36,7 +36,9 @@ def is_codex():
 
 
 def workflow_home():
-    """两个客户端使用各自的本机数据目录。"""
+    """按显式宿主选择本机数据目录，Cursor 看板复用同一轨迹来源。"""
+    if os.environ.get("WORKFLOW_HOST") == "cursor":
+        return Path.home() / ".cursor"
     if is_codex():
         return Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex').expanduser()
     return Path.home() / '.claude'
@@ -111,8 +113,8 @@ def build_event(hook, stamp):
         value = os.environ.get(variable)
         if value:
             event[key] = clip(value, 160)
-    if is_codex():
-        event['host'] = 'codex'
+    if os.environ.get('WORKFLOW_HOST') in {'codex', 'cursor'}:
+        event['host'] = os.environ['WORKFLOW_HOST']
     event.update({key: hook[key] for key in FORWARD if key in hook})
     if 'tool_input' in hook:
         data = hook['tool_input']

@@ -78,6 +78,9 @@ def engine_command(command):
     args = shell_tokens(command)
     if not args:
         return False
+    # Cursor hooks 子进程不修改 Shell 父环境，只认可固定宿主前缀。
+    if args[0] == "WORKFLOW_HOST=cursor":
+        args = args[1:]
     if len(args) < 3 or args[0] not in {"python", "python3"}:
         return False
     script = Path(args[1])
@@ -86,6 +89,8 @@ def engine_command(command):
 
 def dashboard_command(command):
     args = shell_tokens(command)
+    if args and args[0] == "WORKFLOW_HOST=cursor":
+        args = args[1:]
     if not args or len(args) < 3 or args[0] not in {"python", "python3"}:
         return False
     if not Path(args[1]).is_absolute() or Path(args[1]).resolve() != Path(__file__).with_name("dashboard_server.py").resolve():
@@ -117,7 +122,7 @@ def prepare_confirmation(event, root):
     text, markers = confirmation_markers(event)
     if "workflow-confirm:" not in text:
         return None
-    if os.environ.get("WORKFLOW_HOST") == "codex":
+    if os.environ.get("WORKFLOW_HOST") in {"codex", "cursor"}:
         return None
     try:
         task = load_task(root)
@@ -145,7 +150,7 @@ def complete_confirmation(event):
     text, markers = confirmation_markers(event)
     if "workflow-confirm:" not in text:
         return None
-    if os.environ.get("WORKFLOW_HOST") == "codex":
+    if os.environ.get("WORKFLOW_HOST") in {"codex", "cursor"}:
         return CONFIRM_HELP
     root = project_root(event.get("cwd"))
     path = pending_path(root, event.get("session_id"))
@@ -232,7 +237,7 @@ def targets(event, root):
     """从受支持编辑工具提取真实目标；不明确的写入按整个任务范围检查。"""
     data = event.get("tool_input") or {}
     values = []
-    for key in ("file_path", "path", "notebook_path"):
+    for key in ("file_path", "path", "target_file", "notebook_path"):
         if data.get(key):
             values.append(data[key])
     if event.get("tool_name") == "apply_patch":
@@ -315,6 +320,11 @@ def pre_tool(event):
 def post_tool(event):
     """不把普通工具结果或模型代答当人工确认，能力不足时展示 CLI 入口。"""
     CURRENT_EVENT.set(event)
+    if os.environ.get("WORKFLOW_HOST") == "cursor":
+        if event.get("tool_name") in {"Read", "ReadFile"}:
+            return "ENGINE_BASELINE_UNREAD：Cursor Read 回执 schema 未验证，请使用 CLI read-baseline。"
+        if event.get("tool_name") in {"AskQuestion", "AskUserQuestion", "ExitPlanMode"}:
+            return CONFIRM_HELP if "workflow-confirm:" in confirmation_markers(event)[0] else None
     if event.get("tool_name") in {"AskUserQuestion", "ExitPlanMode"}:
         return complete_confirmation(event)
     if event.get("tool_name") not in {"Read", "ReadFile"}:
