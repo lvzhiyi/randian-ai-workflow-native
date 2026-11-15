@@ -1,4 +1,4 @@
-"""workflow_gate.py 的回归测试：python3 -m unittest discover -s plugins/workflow-core/scripts"""
+"""钩子进程双宿主模拟测试；不是实际宿主端到端测试。"""
 import json
 import os
 from pathlib import Path
@@ -14,119 +14,71 @@ class GateTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        base = Path(self.tmp.name)
-        self.state = base / 'state'
-        self.project = base / 'project'
-        (self.project / '.git').mkdir(parents=True)
-        (self.project / 'ai-workflow.yaml').write_text('version: 1\n', encoding='utf-8')
-
-    def hook(self, name, cwd=None, host='claude', **extra):
-        payload = {'session_id': 's1', 'cwd': str(cwd or self.project), 'hook_event_name': name, **extra}
-        env = {**os.environ, 'WORKFLOW_GATE_DIR': str(self.state), 'WORKFLOW_HOST': host}
-        result = subprocess.run([sys.executable, str(HERE / 'workflow_gate.py')], input=json.dumps(payload), text=True,
-                                capture_output=True, env=env)
-        self.assertEqual(result.returncode, 0)
-        return json.loads(result.stdout) if result.stdout.strip() else None
-
-    def edit(self, path='lib/a.dart'):
-        self.hook('PostToolUse', tool_name='Edit', tool_input={'file_path': path})
-
-    def deliver(self):
-        self.hook('PostToolUse', tool_name='Skill', tool_input={'skill': 'workflow-core:deliver'})
-
-    def test_session_start_adds_context_only_for_workflow_projects(self):
-        self.assertIn('workflow-core:workflow', self.hook('SessionStart')['hookSpecificOutput']['additionalContext'])
-        other = Path(self.tmp.name) / 'other'
-        (other / '.git').mkdir(parents=True)
-        self.assertIsNone(self.hook('SessionStart', cwd=other))
-
-    def test_stop_reminds_after_code_edit(self):
-        self.edit()
-        output = self.hook('Stop')
-        self.assertEqual(output['hookSpecificOutput']['hookEventName'], 'Stop')
-        self.assertIn('workflow-core:deliver', output['hookSpecificOutput']['additionalContext'])
-
-    def test_no_reminder_without_edit_after_deliver_or_for_docs(self):
-        self.assertIsNone(self.hook('Stop'))
-        self.edit('docs/a.md')
-        self.assertIsNone(self.hook('Stop'))
-        self.edit()
-        self.deliver()
-        self.assertIsNone(self.hook('Stop'))
-
-    def test_edit_after_deliver_reminds_again(self):
-        self.edit()
-        self.deliver()
-        self.edit()
-        self.assertIsNotNone(self.hook('Stop'))
-
-    def test_slash_deliver_counts(self):
-        self.edit()
-        self.hook('UserPromptExpansion', expansion_type='slash_command', command_name='workflow-core:deliver')
-        self.assertIsNone(self.hook('Stop'))
-
-    def test_stop_hook_active_releases(self):
-        self.edit()
-        self.assertIsNone(self.hook('Stop', stop_hook_active=True))
-
-    def test_codex_patch_reminds_once_until_the_next_edit(self):
-        def patch(path):
-            self.hook('PostToolUse', host='codex', tool_name='apply_patch', tool_input={
-                'command': f'*** Begin Patch\n*** Update File: {path}\n*** End Patch'})
-
-        patch('docs/a.md')
-        self.assertIsNone(self.hook('Stop', host='codex'))
-        patch('lib/a.dart')
-        self.assertIn('$workflow-core:deliver', self.hook('Stop', host='codex')['systemMessage'])
-        self.assertIsNone(self.hook('Stop', host='codex'))
-        patch('lib/with spaces.dart')
-        self.assertIn('$workflow-core:deliver', self.hook('Stop', host='codex')['systemMessage'])
-
-    def test_codex_successful_delivery_clears_reminder(self):
-        command = 'python3 "/some plugin/scripts/workflow_metric.py" record deliver'
-
-        def deliver(output):
-            self.hook('PostToolUse', host='codex', tool_name='Bash', tool_input={'command': command},
-                      tool_response=output)
-
-        self.hook('PostToolUse', host='codex', tool_name='apply_patch', tool_input={
-            'command': '*** Delete File: lib/a.dart'})
-        deliver('Output:\nstatus=REJECTED reason=记录不符合格式\n')
-        self.assertIn('$workflow-core:deliver', self.hook('Stop', host='codex')['systemMessage'])
-        self.hook('PostToolUse', host='codex', tool_name='apply_patch', tool_input={
-            'command': '*** Update File: lib/b.dart'})
-        deliver('Output:\nstatus=RECORDED type=deliver\n')
-        self.assertIsNone(self.hook('Stop', host='codex'))
-
-    def test_bash_write_needs_existing_code_path(self):
-        (self.project / 'lib').mkdir()
-        (self.project / 'lib' / 'a.dart').write_text('', encoding='utf-8')
-        self.hook('PostToolUse', tool_name='Bash', tool_input={'command': 'grep x lib/a.dart'})
-        self.assertIsNone(self.hook('Stop'))
-        self.hook('PostToolUse', tool_name='Bash', tool_input={'command': 'sed -i "" s/a/b/ missing/b.dart'})
-        self.assertIsNone(self.hook('Stop'))
-        self.hook('PostToolUse', tool_name='Bash', tool_input={'command': 'sed -i "" s/a/b/ lib/a.dart'})
-        self.assertIsNotNone(self.hook('Stop'))
-
-    def test_project_without_config_is_ignored(self):
-        other = Path(self.tmp.name) / 'other'
-        (other / '.git').mkdir(parents=True)
-        self.hook('PostToolUse', cwd=other, tool_name='Edit', tool_input={'file_path': 'a.dart'})
-        self.assertIsNone(self.hook('Stop', cwd=other))
-        self.assertFalse(self.state.exists())
-
-    def test_disabled_file_turns_off(self):
+        self.project = Path(self.tmp.name) / "project"
+        self.project.mkdir()
+        (self.project / "ai-workflow.yaml").write_text("version: 1\nengine:\n  enabled: false\n", encoding="utf-8")
+        self.state = Path(self.tmp.name) / "state"
         self.state.mkdir()
-        (self.state / 'disabled').touch()
-        self.edit()
-        self.assertIsNone(self.hook('Stop'))
-        self.assertIsNone(self.hook('SessionStart'))
+        (self.state / "disabled").touch()
 
-    def test_bad_input_is_ignored(self):
-        env = {**os.environ, 'WORKFLOW_GATE_DIR': str(self.state)}
-        result = subprocess.run([sys.executable, str(HERE / 'workflow_gate.py')], input='not json', text=True, capture_output=True, env=env)
-        self.assertEqual((result.returncode, result.stdout), (0, ''))
+    def hook(self, name, host="claude", raw=None, cwd=None, **extra):
+        event = {"session_id": "s1", "cwd": str(cwd or self.project), "hook_event_name": name, **extra}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("WORKFLOW_")}
+        env.update(WORKFLOW_HOST=host, WORKFLOW_GATE_DIR=str(self.state), WORKFLOW_ENGINE_HOME=self.tmp.name)
+        return subprocess.run([sys.executable, str(HERE / "workflow_gate.py")], input=json.dumps(event) if raw is None else raw,
+                              text=True, capture_output=True, env=env)
+
+    def test_disabled_switches_do_not_bypass_pretool(self):
+        for host in ("claude", "codex"):
+            for tool, data in (("Edit", {"file_path": "src/a.py"}), ("Write", {"file_path": "a.py"}),
+                               ("apply_patch", {"command": "*** Add File: x.py"}), ("Bash", {"command": "python3 -c pass"}),
+                               ("mcp__example__update", {})):
+                with self.subTest(host=host, tool=tool):
+                    result = self.hook("PreToolUse", host, tool_name=tool, tool_input=data)
+                    self.assertEqual(result.returncode, 0)
+                    value = json.loads(result.stdout)["hookSpecificOutput"]
+                    self.assertEqual(value["permissionDecision"], "deny")
+                    self.assertIn("ENGINE_TASK_UNBOUND", value["permissionDecisionReason"])
+                    self.assertNotIn('"ask"', result.stdout)
+
+    def test_readonly_and_unconfigured_project_are_allowed(self):
+        for tool, data in (("Read", {"file_path": "rules.md"}), ("Bash", {"command": "git status --short"})):
+            self.assertEqual(self.hook("PreToolUse", tool_name=tool, tool_input=data).stdout, "")
+        other = Path(self.tmp.name) / "other"
+        other.mkdir()
+        self.assertEqual(self.hook("PreToolUse", cwd=other, tool_name="Write", tool_input={"file_path": "x.py"}).stdout, "")
+
+    def test_malformed_json_is_explicit_nonzero(self):
+        for payload in ("not json", "[]", "null"):
+            result = self.hook("PreToolUse", raw=payload)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("ENGINE_GATE_ERROR", result.stderr)
+
+    def test_invalid_pretool_input_fails_closed(self):
+        result = self.hook("PreToolUse", tool_name="Write", tool_input=["invalid"])
+        self.assertEqual(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_stop_reports_task_missing_not_legacy_deliver(self):
+        for host in ("claude", "codex"):
+            result = self.hook("Stop", host)
+            self.assertIn("ENGINE_TASK_UNBOUND", result.stdout)
+            self.assertNotIn("workflow-core:deliver", result.stdout)
+
+    def test_confirmation_callback_does_not_auto_approve(self):
+        for tool in ("AskUserQuestion", "ExitPlanMode"):
+            result = self.hook("PostToolUse", tool_name=tool, tool_input={}, tool_response={"answer": "approved"})
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+
+    def test_manifests_install_synchronous_wildcard_gate(self):
+        for filename in ("hooks.json", "codex.json"):
+            manifest = json.loads((HERE.parent / "hooks" / filename).read_text(encoding="utf-8"))
+            for name in ("PreToolUse", "PostToolUse"):
+                groups = [g for g in manifest["hooks"][name] if any("workflow_gate.py" in str(h) for h in g["hooks"])]
+                self.assertTrue(groups)
+                self.assertNotIn("matcher", groups[0])
+                self.assertTrue(all(not h.get("async") for g in groups for h in g["hooks"]))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

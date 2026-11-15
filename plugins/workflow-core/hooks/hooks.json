@@ -1,5 +1,5 @@
 {
-  "description": "工作流触发兜底（接入项目中默认开启）；执行轨迹（默认关闭，/workflow-core:trace on 开启）",
+  "description": "始终启用的同步任务流程门禁；受支持路径拒绝未授权写入，非可信签署",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -48,6 +48,18 @@
             "type": "command",
             "command": "python3",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_gate.py"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
               "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
             ],
             "async": true
@@ -69,7 +81,6 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|Skill",
         "hooks": [
           {
             "type": "command",

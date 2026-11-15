@@ -1,5 +1,5 @@
 {
-  "description": "工作流入口、可选严格引擎状态查询、交付提醒和本机执行轨迹",
+  "description": "始终启用的同步任务流程门禁；受支持路径拒绝未授权写入，非可信签署",
   "hooks": {
     "SessionStart": [
       {
@@ -28,6 +28,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/workflow_gate.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
             "timeout": 10
           }
@@ -45,7 +54,6 @@
         ]
       },
       {
-        "matcher": "^(Bash|apply_patch)$",
         "hooks": [
           {
             "type": "command",

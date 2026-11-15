@@ -57,11 +57,62 @@ class HookTests(unittest.TestCase):
         self.assertNotIn('abc123', text)
         self.assertNotIn('zzz', text)
 
+    def test_configured_project_collects_without_legacy_trace_switch(self):
+        project = self.root / "project"
+        project.mkdir()
+        (project / "ai-workflow.yaml").write_text("version: 1\n", encoding="utf-8")
+        payload = json.dumps({"session_id": "bound", "hook_event_name": "Stop", "cwd": str(project)})
+        self.assertEqual(self.run_hook(payload), 0)
+        self.assertTrue((self.root / "events" / "bound.jsonl").exists())
+
     def test_bad_input_and_unsafe_session_are_ignored(self):
         (self.root / 'enabled').touch()
         self.assertEqual(self.run_hook('not json'), 0)
         self.assertEqual(self.run_hook('{"session_id":"../x","hook_event_name":"Stop"}'), 0)
         self.assertEqual(list((self.root).rglob('*.jsonl')), [])
+
+
+class BindingTests(unittest.TestCase):
+    def test_trace_records_explicit_task_round_and_executor(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"WORKFLOW_TASK_ID": "T1", "WORKFLOW_ROUND_ID": "r1", "WORKFLOW_EXECUTOR": "agent1"}):
+            event = trace_hook.build_event({"hook_event_name": "PreToolUse", "cwd": "/project", "session_id": "s1"}, 1)
+        self.assertEqual(event.get("task_id"), "T1")
+        self.assertEqual(event.get("round_id"), "r1")
+        self.assertEqual(event.get("executor"), "agent1")
+
+    def test_trace_uses_persisted_session_without_parent_environment(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=True), patch.object(trace_hook, "session_identity", return_value={"task_id": "T2", "round_id": "r2", "executor": "agent2"}):
+            event = trace_hook.build_event({"hook_event_name": "Stop", "session_id": "s2", "cwd": "/project"}, 1)
+        self.assertEqual(event["task_id"], "T2")
+        self.assertEqual(event["round_id"], "r2")
+
+    def test_session_identity_reads_real_database_without_mutation(self):
+        import sqlite3
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "ai-workflow.yaml").write_text("version: 1\n", encoding="utf-8")
+            database = root / "state.sqlite"
+            task = {"id": "T3", "root": str(root.resolve()), "protocol_version": 2,
+                    "current_round": "r3", "rounds": [{"id": "r3", "session_id": "s3", "executor": "e3"}]}
+            with sqlite3.connect(database) as db:
+                db.execute("CREATE TABLE tasks (data TEXT)")
+                db.execute("INSERT INTO tasks VALUES (?)", (json.dumps(task),))
+            before = database.read_bytes()
+            with patch("workflow_engine_cli.default_db", return_value=database):
+                self.assertEqual(trace_hook.session_identity({"cwd": str(root), "session_id": "s3"}),
+                                 {"task_id": "T3", "round_id": "r3", "executor": "e3"})
+                self.assertEqual(trace_hook.session_identity({"cwd": str(root), "session_id": "other"}), {})
+            self.assertEqual(database.read_bytes(), before)
+
+    def test_unbound_trace_does_not_guess_task(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=True):
+            event = trace_hook.build_event({"hook_event_name": "Stop"}, 1)
+        self.assertNotIn("task_id", event)
+        self.assertNotIn("round_id", event)
 
 
 class ReduceTests(unittest.TestCase):

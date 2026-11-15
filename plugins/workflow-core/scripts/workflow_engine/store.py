@@ -18,6 +18,10 @@ class Store:
             os.fchmod(descriptor, 0o600)
         finally:
             os.close(descriptor)
+        with self.read() as db:
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version == 1:
+                return
         with self.transaction() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, 1):
@@ -39,6 +43,16 @@ class Store:
         except BaseException:
             db.rollback()
             raise
+        finally:
+            db.close()
+
+    @contextmanager
+    def read(self):
+        # 查询使用 SQLite 只读连接，不获取写锁或刷新任务记录。
+        db = sqlite3.connect(str(self.path), timeout=10)
+        db.execute("PRAGMA query_only=ON")
+        try:
+            yield db
         finally:
             db.close()
 

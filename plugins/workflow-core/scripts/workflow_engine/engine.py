@@ -9,12 +9,14 @@ from .policy import TIERS, missing, validate_plan
 from .runner import run_checks
 from .snapshot import capture
 from .store import Store
+from .protocol import ProtocolMixin, current, readiness, require
+from .config_checks import enforce
 
 _ACTIVE = set()
 _ACTIVE_LOCK = threading.Lock()
 
 
-class Engine:
+class LegacyEngine:
     def __init__(self, root: Path, db: Path):
         self.root = Path(root).resolve()
         self.db = Path(db).resolve()
@@ -53,6 +55,7 @@ class Engine:
             if not isinstance(task_id, str) or not task_id.strip() or not isinstance(tier, str) or tier not in TIERS:
                 raise EngineError("INPUT_INVALID", "任务标识或档位无效")
             plan_hash = validate_plan(plan, acceptance)
+            enforce(self.root, tier, plan)
             if db.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
                 raise EngineError("TASK_EXISTS", "任务已存在")
             task = self._view({"id": task_id, "tier": tier, "phase": "planning", "state": "created", "version": 1, "root": str(self.root), "acceptance": copy.deepcopy(acceptance), "plan": copy.deepcopy(plan), "plan_digest": plan_hash, "confirmed_digest": None, "snapshot": capture(self.root, plan_hash), "results": []})
@@ -140,15 +143,31 @@ class Engine:
             with self.store.transaction() as db:
                 previous = self.store.replay(db, request_id, payload)
                 if previous is not None:
+                    latest = self._load(db, task_id)
+                    if latest.get("protocol_version") == 2:
+                        return self._refresh(db, latest)
                     return previous
                 task = self._load(db, task_id)
                 self._version(task, expected_version)
-                if task["state"] not in ("ready", "failed", "stale"):
-                    raise EngineError("STATE_INVALID", "任务尚未开始或不可执行")
-                if task["confirmed_digest"] != task["plan_digest"]:
-                    raise EngineError("PLAN_UNCONFIRMED", "计划未确认")
+                if task.get("protocol_version") == 2:
+                    self._refresh(db, task)
+                    require(task["state"] in ("pending_verification", "failed", "stale", "passed", "review_failed", "review_passed"), "STATE_INVALID", "实施尚未完成或已取消")
+                    require(not readiness(task), "MISSING", "就绪证据失效或缺失")
+                    require(all(s["status"] == "done" for s in current(task)["todos"]), "STEPS_INCOMPLETE", "步骤未完成")
+                else:
+                    if task["state"] not in ("ready", "failed", "stale"):
+                        raise EngineError("STATE_INVALID", "任务尚未开始或不可执行")
+                    if task["confirmed_digest"] != task["plan_digest"]:
+                        raise EngineError("PLAN_UNCONFIRMED", "计划未确认")
+                verify_signature = enforce(self.root, task["tier"], task["plan"])
+                if task.get("protocol_version") == 2:
+                    require(verify_signature == task.get("verify_config_digest"), "VERIFY_CONFIG_CHANGED", "配置变化须更新任务确认当前验证计划")
                 before = capture(self.root, task["plan_digest"])
                 task.update(state="running", phase="verification", version=task["version"] + 1, operation={"token": token, "pid": os.getpid(), "request_id": request_id, "payload": payload})
+                if task.get("protocol_version") == 2:
+                    self._attempt(task, "verification", "running", {"operation": token})
+                    current(task).update(state="running", phase="verification")
+                    task["activity"] = {"action": "run_started", "operation": token, "round_id": task["current_round"]}
                 self._view(task)
                 self.store.save(db, task, "run_started", request_id, payload)
             # 运行期间不持有 SQLite 锁；幂等重放返回已登记的 running 响应。
@@ -157,18 +176,32 @@ class Engine:
             try:
                 results = run_checks(self.root, task["plan"])
                 after = capture(self.root, task["plan_digest"])
-            except (EngineError, OSError) as exc:
+                if enforce(self.root, task["tier"], task["plan"]) != verify_signature:
+                    after = None
+            except Exception as exc:
                 after = None
                 failure = getattr(exc, "code", "RUN_ERROR")
             with self.store.transaction() as db:
                 latest = self._load(db, task_id)
                 if latest.get("operation", {}).get("token") != token:
                     raise EngineError("OPERATION_CONFLICT", "执行租约已变化")
-                state = "stale" if before != after else "passed" if all(r["exit_code"] == 0 and r["reason"] == "exit" for r in results) else "failed"
+                state = "failed" if failure else "stale" if before != after else "passed" if results and all(r["exit_code"] == 0 and r["reason"] == "exit" for r in results) else "failed"
                 latest.update(state=state, snapshot=before, results=results, version=latest["version"] + 1)
                 latest.pop("operation", None)
                 if failure:
                     latest["failure"] = failure
+                if latest.get("protocol_version") == 2:
+                    attempt = current(latest)["attempts"][-1]
+                    attempt.update(status="error" if failure else "invalidated" if state == "stale" else state, snapshot=before, results=results, failure=failure)
+                    for item in current(latest)["evidence"]:
+                        if item["id"] == attempt["evidence_id"]:
+                            item["data"].update(snapshot=before, results=results, failure=failure)
+                            item["valid"] = state == "passed"
+                    latest.pop("failure", None)
+                    if failure:
+                        latest["failure"] = failure
+                    current(latest).update(state=state, phase="verification")
+                    latest["activity"] = {"action": "run_finished", "round_id": latest["current_round"], "state": state}
                 self._view(latest)
                 self.store.save(db, latest, "run_finished")
                 db.execute("UPDATE requests SET response=? WHERE key=?", (canonical(latest), request_id))
@@ -201,6 +234,15 @@ class Engine:
                 raise EngineError("ACTIVE_OPERATION", "所有者进程仍活跃，不能恢复或终止")
             task.update(state="failed", phase="verification", version=task["version"] + 1, failure="orphaned_operation", results=[])
             task.pop("operation")
+            if task.get("protocol_version") == 2:
+                for attempt in current(task)["attempts"]:
+                    if attempt["status"] == "running":
+                        attempt.update(status="error", failure="orphaned_operation")
+                current(task).update(state="failed", phase="verification")
             self._view(task)
             self.store.save(db, task, "recover", request_id, payload)
             return task
+
+
+class Engine(ProtocolMixin, LegacyEngine):
+    """优先采用任务级协议，保留旧检查 API 的兼容读取和执行。"""

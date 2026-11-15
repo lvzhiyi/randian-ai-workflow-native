@@ -207,11 +207,12 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(r["failure"], "orphaned_operation")
         self.assertEqual(r, self.e.recover("t", r["version"] - 1, "recover"))
 
-    def test_large_output_is_discarded(self):
+    def test_large_output_is_bounded(self):
         r = self.ready(self.plan("import os; os.write(1, b'x' * 10000000); os.write(2, b'y' * 10000000)"))
         r = self.e.run("t", r["version"], "run")
         self.assertEqual(r["state"], "passed")
-        self.assertLess(len(json.dumps(r)), 4000)
+        self.assertTrue(r["results"][0]["truncated"])
+        self.assertLess(len(json.dumps(r)), 12000)
 
     def test_running_request_replay_and_events(self):
         r = self.ready(self.plan("import time; time.sleep(.4)"))

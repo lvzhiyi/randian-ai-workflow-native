@@ -1,29 +1,36 @@
-"""严格模式钩子只展示权威状态，不把交付技能当作完成证据。"""
-import json
+"""双宿主边界状态的模拟适配测试，不代表真实宿主端到端覆盖。"""
 import os
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
-import unittest
+import sys
 
-GATE = Path(__file__).resolve().parents[1] / "workflow_gate.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import unittest
+from unittest.mock import patch
+
+import engine_codex
+import host_gate
 
 
 class CodexTests(unittest.TestCase):
-    def test_enabled_mode_without_binding_reports_missing(self):
+    def test_disabled_engine_still_reports_missing(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder) / "project"
-            root.mkdir()
-            (root / "ai-workflow.yaml").write_text(
-                "version: 1\nengine:\n  enabled: true\n", encoding="utf-8")
-            result = subprocess.run([sys.executable, str(GATE)],
-                input=json.dumps({"session_id": "s1", "cwd": str(root), "hook_event_name": "Stop"}),
-                capture_output=True, text=True,
-                env={**os.environ, "WORKFLOW_HOST": "codex", "WORKFLOW_ENGINE_HOME": folder})
-            self.assertEqual(result.returncode, 0)
-            self.assertIn("ENGINE_TASK_UNBOUND", result.stdout)
-            self.assertNotIn("decision", result.stdout)
+            root = Path(folder)
+            (root / "ai-workflow.yaml").write_text("version: 1\nengine:\n  enabled: false\n", encoding="utf-8")
+            with patch.dict(os.environ, {"WORKFLOW_TASK_ID": ""}):
+                result = engine_codex.context({"cwd": str(root), "session_id": "s1", "hook_event_name": "Stop"})
+            self.assertIn("ENGINE_TASK_UNBOUND", result)
+
+    def test_review_passed_is_not_human_acceptance(self):
+        task = {"protocol_version": 2, "id": "T1", "current_round": "r1", "state": "review_passed", "missing": [],
+                "rounds": [{"id": "r1", "executor": "agent", "session_id": "s1"}]}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "ai-workflow.yaml").write_text("version: 1\n", encoding="utf-8")
+            with patch.dict(os.environ, {"WORKFLOW_TASK_ID": "T1", "WORKFLOW_ROUND_ID": "r1", "WORKFLOW_EXECUTOR": "agent"}), patch.object(host_gate, "load_task", return_value=task):
+                result = engine_codex.context({"cwd": str(root), "session_id": "s1", "hook_event_name": "Stop"})
+            self.assertIn("待人工验收", result)
+            self.assertIn("review_passed", result)
 
 
 if __name__ == "__main__":

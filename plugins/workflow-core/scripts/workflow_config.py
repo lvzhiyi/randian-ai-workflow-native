@@ -23,7 +23,9 @@ PLACEHOLDERS = ('待确认', '无')
 # 'list' 字符串列表，'cmd' 单条命令或命令列表，'bool' 布尔值，'enum:a|b' 枚举。
 SCHEMA = {
     'version': 'version',
+    # 旧开关仅用于读取历史配置，执行门禁不得再依据其值跳过。
     'engine': {'enabled': 'bool'},
+    'baseline': {'required': 'list', 'scoped': 'list'},
     'docs': {
         'product_root': 'path', 'home': 'path', 'requirements': 'path', 'cards_dir': 'path',
         'overview': 'path', 'design_index': 'path', 'dev_docs': 'path', 'glossary': 'path',

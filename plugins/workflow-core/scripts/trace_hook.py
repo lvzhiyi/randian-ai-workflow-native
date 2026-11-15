@@ -64,9 +64,53 @@ def shrink_input(data):
             for key, value in data.items()}
 
 
+def session_identity(hook):
+    """只读解析唯一会话归属；不计算源码哈希，不创建引擎或状态库。"""
+    import sqlite3
+    try:
+        cwd, session = hook.get('cwd'), hook.get('session_id')
+        if not isinstance(cwd, str) or not session:
+            return {}
+        directory = Path(cwd).resolve()
+        root = next((p for p in (directory, *directory.parents)
+                     if (p / 'ai-workflow.yaml').is_file()), None)
+        if root is None:
+            return {}
+        from workflow_engine_cli import default_db
+        database = default_db(root)
+        if not database.is_file() or database.is_symlink():
+            return {}
+        matches, total = [], 0
+        with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=0.2) as db:
+            # 同时限制行数和总载荷；无法完整确定唯一归属时宁可不关联。
+            rows = db.execute('SELECT length(CAST(data AS BLOB)), CASE WHEN length(CAST(data AS BLOB)) <= 1048576 THEN data ELSE NULL END FROM tasks LIMIT 1001')
+            for index, (size, text) in enumerate(rows):
+                total += size
+                if index >= 1000 or text is None or total > 2 * 1024 * 1024:
+                    return {}
+                task = json.loads(text)
+                active = next((r for r in task.get('rounds', []) if r.get('id') == task.get('current_round')), {})
+                if (task.get('root') == str(root) and task.get('protocol_version') == 2
+                        and active.get('session_id') == session and active.get('executor')
+                        and active.get('state') not in ('cancelled', 'review_passed')):
+                    matches.append({'task_id': task['id'], 'round_id': active['id'], 'executor': active['executor']})
+        return matches[0] if len(matches) == 1 else {}
+    except Exception:
+        # 采集故障只能保留未归属，不改变任务状态或影响编码会话。
+        return {}
+
+
 def build_event(hook, stamp):
     """把钩子输入转成日志事件。"""
     event = {'ts': stamp, 'event': hook.get('hook_event_name')}
+    event.update(session_identity(hook))
+    # 只继承显式绑定，不从提示词或文件名猜测任务，避免跨任务归属污染。
+    for key, variable in (('task_id', 'WORKFLOW_TASK_ID'),
+                          ('round_id', 'WORKFLOW_ROUND_ID'),
+                          ('executor', 'WORKFLOW_EXECUTOR')):
+        value = os.environ.get(variable)
+        if value:
+            event[key] = clip(value, 160)
     if is_codex():
         event['host'] = 'codex'
     event.update({key: hook[key] for key in FORWARD if key in hook})
@@ -100,10 +144,18 @@ def main():
     """钩子入口，始终返回 0。"""
     stamp = time.time()
     root = trace_dir()
-    if not os.path.exists(os.path.join(root, 'enabled')):
-        return 0
     try:
         hook = json.load(sys.stdin)
+        # 已接入项目统一采集供看板观测，不再要求先启动独立 Trace 功能。
+        # 非接入项目仍遵循旧的显式开关，避免扩大本机采集范围。
+        cwd = hook.get('cwd')
+        configured = False
+        if isinstance(cwd, str):
+            directory = Path(cwd).resolve()
+            configured = any((parent / 'ai-workflow.yaml').is_file()
+                             for parent in (directory, *directory.parents))
+        if not configured and not os.path.exists(os.path.join(root, 'enabled')):
+            return 0
         if SESSION_ID.match(str(hook.get('session_id', ''))):
             append_event(root, build_event(hook, stamp))
     except Exception:  # 钩子故障不能影响会话
