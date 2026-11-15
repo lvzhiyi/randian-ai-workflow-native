@@ -7,7 +7,7 @@ argument-hint: on | off | status [--root 项目根] [--task ID]
 
 # 任务级只读看板
 
-`${CLAUDE_PLUGIN_ROOT}` 指插件根；未替换时从 `SKILL.md` 向上三级定位，执行代入绝对路径。Codex 前置 `WORKFLOW_HOST=codex`。
+`${CLAUDE_PLUGIN_ROOT}` 指插件根；未替换时从 `SKILL.md` 向上三级定位，执行代入绝对路径。按当前宿主前置 `WORKFLOW_HOST=cursor` / `WORKFLOW_HOST=codex` / `WORKFLOW_HOST=claude`。服务管理无需绑定实施任务或确认档位，用户未指定任务时不带 `--task`。
 
 ## 执行
 
@@ -17,7 +17,7 @@ argument-hint: on | off | status [--root 项目根] [--task ID]
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/dashboard_server.py" status --root "项目根"
 ```
 
-需要时将 `status` 换成用户请求的 `on` / `off`，附实际支持的 `--task "ID"`。先核对脚本实际 `--help`。只转述命令返回的服务状态与本机 URL，不自动打开浏览器。脚本缺失、端口/权限/沙盒失败明确报告，不自动安装依赖或重配权限；需要用户本机执行时提供同一命令。
+需要时将 `status` 换成用户请求的 `on` / `off`，附实际支持的 `--task "ID"`。门禁只允许固定脚本的明确 `on` / `off` / `status` 及不重复的 `--root` / `--task` 键值；不通过门禁调用无 action、`serve` 或额外参数。只转述命令返回的服务状态与本机 URL，不自动打开浏览器。脚本缺失、端口/权限/沙盒失败明确报告，不自动安装依赖或重配权限；需要用户本机执行时提供同一命令。
 
 ## 展示与边界
 

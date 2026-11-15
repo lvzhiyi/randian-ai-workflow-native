@@ -76,7 +76,7 @@ class HostGateTests(unittest.TestCase):
 
     def test_plan_exception_only_explicit_document_paths(self):
         with patch.dict(os.environ, {"WORKFLOW_PLAN_PATHS": "docs/plan.md"}), patch.object(host_gate, "load_task", side_effect=ValueError("unbound")):
-            self.assertIsNone(host_gate.pre_tool(self.event("Write", file_path="docs/plan.md")))
+            self.assertIsNotNone(host_gate.pre_tool(self.event("Write", file_path="docs/plan.md")))
             self.assertIsNotNone(host_gate.pre_tool(self.event("Write", file_path="docs/source.py")))
             self.assertIsNotNone(host_gate.pre_tool(self.event("Write", file_path="docs/other.md")))
 
@@ -259,7 +259,7 @@ class HostGateTests(unittest.TestCase):
     def test_explicit_mcp_allowlist_and_dashboard_status(self):
         command = "python3 " + str(Path(host_gate.__file__).with_name("dashboard_server.py"))
         self.assertTrue(host_gate.dashboard_command(command + " status --root /tmp"))
-        self.assertFalse(host_gate.dashboard_command(command + " on"))
+        self.assertTrue(host_gate.dashboard_command(command + " on"))
         with patch.dict(os.environ, {"WORKFLOW_READONLY_MCP_TOOLS": "mcp__known__read"}), patch.object(host_gate, "load_task", side_effect=ValueError("unbound")):
             self.assertIsNone(host_gate.pre_tool(self.event("mcp__known__read")))
             self.assertIsNotNone(host_gate.pre_tool(self.event("mcp__unknown__read")))

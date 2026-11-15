@@ -11,6 +11,28 @@ description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，�
 
 流程说明（三档、拆解、交接、交付等）由插件技能承载，**不**在项目里生成 `ai-workflow.md` 一类的流程文档；项目里只放项目事实。
 
+
+## 会话级规划登记（写入前必做）
+
+用户选择本技能即授权本轮相应规划产物，不需要创建假实施任务或确认实施档位。原生钩子不能自动观察技能调用；必须由技能显式调用下面的固定绝对脚本登记。先列清本轮精确文件清单，不能登记整个目录或通配符。`${SESSION}` 取当前宿主真实会话：Cursor 的 `conversation_id`，Codex 的 session/thread 标识（`CODEX_THREAD_ID` 可用时使用），Claude 的 `session_id`；取不到就报告缺项，不编造，不使用 Serena 会话 ID。
+
+```bash
+WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" open --root "项目绝对根" --session "${SESSION}" --operation init --path "精确目标.md" --ttl 1800
+WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" status --root "项目绝对根" --session "${SESSION}"
+```
+
+`HOST` 换为 `cursor` / `codex` / `claude`，脚本路径必须代入实际插件绝对路径。每个目标重复 `--path`；登记会替换本会话当前清单，最长 3600 秒。只登记本轮确需修改的文件：配置中的首页、需求、总览、术语、设计索引，以及 `prd-breakdown` 的 `docs.cards_dir` 下直接模块卡。`docs.product_root` 决定未单独配置角色的默认位置。README 只作为本轮明确列出的入口文件，不自动开放任意 README 或 `docs/*.md`。模板源码和产品代码不属于规划授权。
+
+登记后仅通过 Write / Edit / apply_patch 写入，补丁全部目标必须命中清单；不要用 Shell 重定向、脚本文件写入或 MCP 混写。收尾、取消或交接前运行（失败也报告，不静默遗留授权）：
+
+```bash
+WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" close --root "项目绝对根" --session "${SESSION}"
+```
+
+登记与开闭审计保存在引擎外置状态目录，绑定项目、会话、操作及精确路径，过期或关闭后失效。它是用户所选技能的流程防护栏，不是可信身份认证或安全沙箱，也不授权产品实施。
+
+初始化可登记根 `ai-workflow.yaml`、明确选择的 `AGENTS.md` / `CLAUDE.md` 和有限文档骨架（home / requirements / overview / glossary / design_index，dev_docs 下 coding / architecture / testing / ui / api-integration）。无配置时使用上述默认骨架，不因配置尚不存在而死锁；自定义目录时把确认后的配置草稿以单引号 JSON 通过 `--config-json '{"version":"1","docs":{"product_root":"实际目录"}}'` 内联传入 open，校验结构后按草稿推导目标。先按第 3 步确认草稿再登记，已有配置/骨架仍遵守不覆盖原则。此例外不包括 `.claude/settings.json`、源码或任意模板路径；额外配置变更需独立授权。
+
 ## 1. 探测（只读）
 
 运行探测脚本，它只读文件、不做修改：

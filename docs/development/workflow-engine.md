@@ -8,6 +8,14 @@
 
 CLI `create --details` 必填且必须为 JSON 对象（包括拒绝 null）；CLI 不存在旧协议创建回退。所有旧任务变更执行 CLI（包括 run/start/cancel/confirm-plan）均拒绝并要求先 adopt-protocol；status/snapshot/history 仍可只读查询旧任务。Python `create(..., details=...)` 创建 v2。旧 `create(id,tier,acceptance,plan,request)` 保留首期 API 语义用于兼容既有调用，不作为新任务工作流入口；旧任务可调用 `adopt_protocol(..., details)` 显式升级，旧事件保留、旧证据不继承。标准/完整档必须升级或直接创建 v2，才能使用新增的真实批准和评审闭环，不再要求不存在的可信签署通道。
 
+## 任务外的规划与服务管理
+
+`workflow_planning_cli.py open|status|close --root PROJECT --session SESSION` 是固定绝对脚本入口，不要求 `--task`。用户选择 init / prd-breakdown 后由技能显式 open：附 `--operation init|prd-breakdown`、重复 `--path` 精确目标及可选 `--ttl`（默认 1800 秒、最多 3600 秒）。配置文档角色来自 `docs.*`；模块卡只限 cards_dir 直接 Markdown 文件；README 只有明确登记才开放。init 可通过 `--config-json` 内联已确认的配置草稿自举有限配置与骨架目标，不因缺配置文件死锁。
+
+状态和开闭 JSONL 审计保存在项目外引擎目录，以项目、真实宿主 session、操作、精确路径及有效期约束。原生 Write / Edit / apply_patch 的全部目标命中才放行；路径穿越、符号链接、伪扩展、Shell 文件写入、MCP 混写及模板/产品代码不在例外内。结束、取消和交接前 close，过期或关闭后恢复原实施门槛。旧 WORKFLOW_PLAN_PATHS 环境例外不再生效。技能调用不是可靠身份认证，宿主也不能自动观察 Skill 后声称用户已批准实施。
+
+看板固定脚本只接受明确 on / off / status 与不重复的 --root / --task 键值，不需要实施任务；三宿主固定 WORKFLOW_HOST 前缀均支持。动作可放在白名单键值之前或之后，标量选项重复仍拒绝。无 action、serve、其他参数、任意脚本和 shell 拼接不属于免任务命令。init 的固定 detect.sh、git check-ignore -v 与固定 check_docs.py --root PROJECT --check-config 独立只读放行，不要求实施任务。macOS 只规范化 /var、/tmp、/etc 的已知 /private 系统祖先别名，项目内部符号链接仍逐级拒绝；配置与草稿均不可将插件 scripts/skills/templates 源码映射成规划文档。只读调查保持原有独立放行逻辑。
+
 ## 小接口
 
 所有修改方法前缀均为 `(task_id, expected_version, request_id, ...)`：

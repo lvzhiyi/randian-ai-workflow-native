@@ -16,6 +16,26 @@ description: PRD 需求接收、同步与拆解。用户提供 PRD/需求文档/
 - **模块卡**在首次拆出某个模块时创建：`product/任务/<模块>.md`，一级标题为模块名，子需求按 `${CLAUDE_PLUGIN_ROOT}/templates/task-card.md` 填写，并在版本任务总览加一行入口。已有模块卡则追加子需求，不另建文件。
 - 只创建缺失文件，不覆盖已有内容。
 
+
+## 会话级规划登记（写入前必做）
+
+用户选择本技能即授权本轮相应规划产物，不需要创建假实施任务或确认实施档位。原生钩子不能自动观察技能调用；必须由技能显式调用下面的固定绝对脚本登记。先列清本轮精确文件清单，不能登记整个目录或通配符。`${SESSION}` 取当前宿主真实会话：Cursor 的 `conversation_id`，Codex 的 session/thread 标识（`CODEX_THREAD_ID` 可用时使用），Claude 的 `session_id`；取不到就报告缺项，不编造，不使用 Serena 会话 ID。
+
+```bash
+WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" open --root "项目绝对根" --session "${SESSION}" --operation prd-breakdown --path "精确目标.md" --ttl 1800
+WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" status --root "项目绝对根" --session "${SESSION}"
+```
+
+`HOST` 换为 `cursor` / `codex` / `claude`，脚本路径必须代入实际插件绝对路径。每个目标重复 `--path`；登记会替换本会话当前清单，最长 3600 秒。只登记本轮确需修改的文件：配置中的首页、需求、总览、术语、设计索引，以及 `prd-breakdown` 的 `docs.cards_dir` 下直接模块卡。`docs.product_root` 决定未单独配置角色的默认位置。README 只作为本轮明确列出的入口文件，不自动开放任意 README 或 `docs/*.md`。模板源码和产品代码不属于规划授权。
+
+登记后仅通过 Write / Edit / apply_patch 写入，补丁全部目标必须命中清单；不要用 Shell 重定向、脚本文件写入或 MCP 混写。收尾、取消或交接前运行（失败也报告，不静默遗留授权）：
+
+```bash
+WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" close --root "项目绝对根" --session "${SESSION}"
+```
+
+登记与开闭审计保存在引擎外置状态目录，绑定项目、会话、操作及精确路径，过期或关闭后失效。它是用户所选技能的流程防护栏，不是可信身份认证或安全沙箱，也不授权产品实施。
+
 ## 1. 先明确授权
 
 本轮是只接收/同步文档、拆分任务、写提案还是实施？需求接收与拆解使用同一入口，只做指定范围。小任务直接从用户指令原位记录目标、范围、验收、来源与依赖，不强制 PRD。检查工作区与文档基线，保护已有修改；未就绪可调查但不可实施。

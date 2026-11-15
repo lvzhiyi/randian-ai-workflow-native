@@ -30,6 +30,10 @@ Cursor AskQuestion 不能作为批准回执；人工在交互终端运行 confir
 
 `handoff` 随时保存与恢复；`dashboard` 是任务级只读观测与 Trace 整合入口；旧 `trace` 技能仅提示迁移。只做整理的授权到整理结束，不自行转入产品实施。
 
+## 规划与实施分界
+
+用户调用 `init` / `prd-breakdown` 时，按所选技能显式执行固定绝对入口 `workflow_planning_cli.py open --root "项目绝对根" --session "宿主真实会话" --operation init或prd-breakdown --path "精确目标"`；不为文档拆解创建假实施任务。Cursor 使用 conversation_id，Codex 使用真实 session/thread（可用时为 CODEX_THREAD_ID），Claude 使用 session_id；不能假称钩子自动感知了 Skill。具体登记、草稿自举、时效及 close 命令见对应技能。只放行授权清单中的原生文档编辑，不放行 Shell 写文件、MCP 混写或产品代码；结束、取消或交接前 close。dashboard 的明确 on/off/status 同样不依赖实施任务。两者都不构成真人身份认证，不替代实施任务的原门槛。
+
 ## 始终启用的插件级防护栏
 
 任务流程以引擎为权威，宿主在受支持工具路径上执行门禁；无提醒/严格模式选择，也不提供 engine 开关。新任务使用 v2（`create --details`）；旧任务经用户明确选择后 `adopt-protocol`，保留历史，旧证据不自动继承。

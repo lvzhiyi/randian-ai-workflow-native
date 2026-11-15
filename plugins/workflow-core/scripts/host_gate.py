@@ -29,7 +29,7 @@ def project_root(cwd):
         if (folder / "ai-workflow.yaml").is_file():
             return folder
         if (folder / ".git").exists():
-            break
+            return folder
     return None
 
 
@@ -78,8 +78,8 @@ def engine_command(command):
     args = shell_tokens(command)
     if not args:
         return False
-    # Cursor hooks 子进程不修改 Shell 父环境，只认可固定宿主前缀。
-    if args[0] == "WORKFLOW_HOST=cursor":
+    # hook 子进程不修改 Shell 父环境，只认可三宿主固定前缀。
+    if args[0] in {"WORKFLOW_HOST=cursor", "WORKFLOW_HOST=codex", "WORKFLOW_HOST=claude"}:
         args = args[1:]
     if len(args) < 3 or args[0] not in {"python", "python3"}:
         return False
@@ -87,22 +87,87 @@ def engine_command(command):
     return script.is_absolute() and script.resolve() == Path(__file__).with_name("workflow_engine_cli.py").resolve()
 
 
-def dashboard_command(command):
+def fixed_command(command, filename):
+    """固定绝对入口与宿主前缀，不接受任意脚本或 shell 拼接。"""
     args = shell_tokens(command)
-    if args and args[0] == "WORKFLOW_HOST=cursor":
+    if args and args[0] in {"WORKFLOW_HOST=cursor", "WORKFLOW_HOST=codex", "WORKFLOW_HOST=claude"}:
         args = args[1:]
     if not args or len(args) < 3 or args[0] not in {"python", "python3"}:
+        return None
+    script = Path(args[1])
+    if not script.is_absolute() or script != Path(__file__).with_name(filename).absolute() or script.is_symlink():
+        return None
+    return args[2:]
+
+
+def command_options(args, actions, options, repeated=()):
+    """按 argv 消费键值，动作可以位于任意合法位置，重复标量一律拒绝。"""
+    if not args:
+        return None
+    action, values = None, {}
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in actions and action is None:
+            action = token
+            index += 1
+        elif token in options and index + 1 < len(args):
+            value = args[index + 1]
+            if not value or value.startswith("-") or token in values and token not in repeated:
+                return None
+            values.setdefault(token, []).append(value)
+            index += 2
+        else:
+            return None
+    return (action, values) if action else None
+
+
+def dashboard_command(command):
+    """服务管理不需要实施任务，但必须明确动作且参数不能扩展或重复。"""
+    return command_options(fixed_command(command, "dashboard_server.py"), {"on", "off", "status"}, {"--root", "--task"}) is not None
+
+
+def planning_command(command, event):
+    """仅当前项目和宿主会话可登记；不将登记视为真人身份认证。"""
+    parsed = command_options(fixed_command(command, "workflow_planning_cli.py"), {"open", "close", "status"},
+                             {"--root", "--session", "--operation", "--path", "--ttl", "--config-json"}, {"--path"})
+    if not parsed:
         return False
-    if not Path(args[1]).is_absolute() or Path(args[1]).resolve() != Path(__file__).with_name("dashboard_server.py").resolve():
+    action, values = parsed
+    if (values.get("--session") != [event.get("session_id")] or "--root" not in values or
+            Path(values["--root"][0]).resolve() != project_root(event.get("cwd"))):
         return False
-    remaining = args[2:]
-    if remaining and remaining[0] == "status":
-        remaining = remaining[1:]
-    while remaining:
-        if len(remaining) < 2 or remaining[0] not in {"--root", "--task"}:
+    if action != "open":
+        return set(values) == {"--root", "--session"}
+    return (values.get("--operation") in (["init"], ["prd-breakdown"]) and bool(values.get("--path")) and
+            ("--ttl" not in values or values["--ttl"][0].isdigit() and 1 <= int(values["--ttl"][0]) <= 3600) and
+            ("--config-json" not in values or values["--operation"] == ["init"]))
+
+
+def init_read_command(command, event):
+    """初始化只读探测与文档校验的固定入口，不开放任意解释器执行。"""
+    args = shell_tokens(command)
+    if args and args[0] in {"WORKFLOW_HOST=cursor", "WORKFLOW_HOST=codex", "WORKFLOW_HOST=claude"}:
+        args = args[1:]
+    if not args:
+        return False
+    root = project_root(event.get("cwd"))
+    def same_root(value):
+        return Path(value if Path(value).is_absolute() else Path(event.get("cwd") or ".") / value).resolve() == root
+    plugin = Path(__file__).absolute().parent.parent
+    if args[0] == "bash" and len(args) == 3:
+        return args[1] == str(plugin / "skills/init/detect.sh") and not Path(args[1]).is_symlink() and same_root(args[2])
+    if args[:3] == ["git", "check-ignore", "-v"]:
+        try:
+            from workflow_planning_cli import safe_path
+            return bool(args[3:]) and all(not p.startswith("-") and safe_path(root, p) for p in args[3:])
+        except (ValueError, TypeError):
             return False
-        remaining = remaining[2:]
-    return True
+    remaining = fixed_command(command, "check_docs.py")
+    if remaining is None or remaining.count("--check-config") != 1:
+        return False
+    remaining = [a for a in remaining if a != "--check-config"]
+    return len(remaining) == 2 and remaining[0] == "--root" and same_root(remaining[1])
 
 
 def pending_path(root, session):
@@ -245,9 +310,9 @@ def targets(event, root):
         values.extend(re.findall(r"^\*\*\* (?:Update File|Add File|Delete File|Move to): (.+)$", text, re.M))
     result = []
     for value in values:
-        path = Path(value)
-        path = path if path.is_absolute() else root / path
-        result.append(path.resolve().relative_to(root).as_posix())
+        # 规范化前保留并拒绝穿越与链接，不能把越界路径伪装为已登记目标。
+        from workflow_planning_cli import safe_path
+        result.append(safe_path(root, value))
     return result
 
 
@@ -288,13 +353,13 @@ def pre_tool(event):
     if tool in READ_TOOLS or tool in set(filter(None, os.environ.get("WORKFLOW_READONLY_MCP_TOOLS", "").split(","))):
         return None
     data = event.get("tool_input") or {}
-    if tool in SHELL_TOOLS and (readonly_shell(shell_command(data)) or engine_command(shell_command(data)) or dashboard_command(shell_command(data))):
+    if tool in SHELL_TOOLS and (readonly_shell(shell_command(data)) or engine_command(shell_command(data)) or dashboard_command(shell_command(data)) or planning_command(shell_command(data), event) or init_read_command(shell_command(data), event)):
         return None
     try:
         paths = targets(event, root)
-        # 仅显式列出的 Markdown 方案文档可在实施前编辑，不允许扩展名或目录通配。
-        plans = {p for p in os.environ.get("WORKFLOW_PLAN_PATHS", "").split(os.pathsep) if p}
-        if tool in EDIT_TOOLS and paths and all(p in plans and p.endswith(".md") and p.startswith("docs/") for p in paths):
+        # 规划例外只覆盖原生编辑；Shell 与 MCP 不能借用规划登记写文件。
+        from workflow_planning_cli import allows
+        if tool in {"Write", "Edit", "apply_patch"} and allows(root, event.get("session_id"), paths):
             return None
         task = load_task(root)
         error = binding_error(event, task)
@@ -373,6 +438,10 @@ def context(event):
     if event.get("hook_event_name") == "PostToolUse":
         return post_tool(event)
     try:
+        from workflow_planning_cli import read_record
+        planning = read_record(project_root(event.get("cwd")), event.get("session_id"))
+        if planning:
+            return "ENGINE_PLANNING：" + json.dumps({k: planning[k] for k in ("operation", "paths", "expires_at")}, ensure_ascii=False) + "；结束或交接前 CLI close，不授权产品实施。"
         task = load_task(project_root(event.get("cwd")))
         error = binding_error(event, task)
         if error:
@@ -382,4 +451,6 @@ def context(event):
             message += "；Agent 双轴评审通过，待人工验收（非可信签署）。"
         return message
     except Exception as exc:
-        return str(exc) + "；请绑定 v2 任务、确认档位、完整档批准并 CLI read-baseline，再 start。"
+        if "ENGINE_TASK_UNBOUND" in str(exc):
+            return "ENGINE_TASK_UNBOUND：只读调查无需任务；可调用 init / prd-breakdown 登记规划，或 dashboard 管理服务；产品实施需 create / bind-executor 并满足实施门槛。"
+        return str(exc) + "；请核对任务状态及绑定，规划使用独立 planning 入口。"

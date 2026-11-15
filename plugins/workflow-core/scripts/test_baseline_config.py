@@ -7,6 +7,13 @@ from workflow_config import load, validate
 
 
 class BaselineConfigTests(unittest.TestCase):
+    def test_new_template_has_one_authoritative_baseline_list(self):
+        from workflow_config import parse_yaml_subset
+        template = Path(__file__).resolve().parents[1] / "templates" / "ai-workflow.yaml"
+        config = parse_yaml_subset(template.read_text(encoding="utf-8"))
+        self.assertNotIn("code_rules_doc", config)
+        self.assertEqual(config["baseline"]["required"].count("docs/development/coding.md"), 1)
+
     def test_accepts_explicit_required_and_scoped_rules(self):
         self.assertEqual(validate({"version": "1", "baseline": {
             "required": ["docs/architecture.md"],

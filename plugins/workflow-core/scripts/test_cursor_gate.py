@@ -208,10 +208,13 @@ class CursorGateTests(unittest.TestCase):
             self.assertIn("read-baseline", host_gate.post_tool(event))
         cli = str(SCRIPTS / "workflow_engine_cli.py")
         self.assertTrue(host_gate.engine_command("WORKFLOW_HOST=cursor python3 " + cli + " status"))
-        self.assertFalse(host_gate.engine_command("WORKFLOW_HOST=claude python3 " + cli + " status"))
+        self.assertTrue(host_gate.engine_command("WORKFLOW_HOST=claude python3 " + cli + " status"))
+        self.assertFalse(host_gate.engine_command("WORKFLOW_HOST=unknown python3 " + cli + " status"))
+        self.assertFalse(host_gate.engine_command("OTHER=value python3 " + cli + " status"))
         dashboard = str(SCRIPTS / "dashboard_server.py")
         self.assertTrue(host_gate.dashboard_command("WORKFLOW_HOST=cursor python3 " + dashboard + " status"))
-        self.assertFalse(host_gate.dashboard_command("WORKFLOW_HOST=cursor python3 " + dashboard + " on"))
+        self.assertTrue(host_gate.dashboard_command("WORKFLOW_HOST=cursor python3 " + dashboard + " on"))
+        self.assertFalse(host_gate.dashboard_command("WORKFLOW_HOST=cursor python3 " + dashboard + " on; touch injected"))
 
 
 if __name__ == "__main__":
