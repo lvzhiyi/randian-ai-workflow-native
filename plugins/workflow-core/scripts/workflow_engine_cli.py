@@ -28,7 +28,7 @@ def parser():
     result.add_argument('--root', default='.')
     result.add_argument('--db')
     commands = result.add_subparsers(dest='action', required=True, parser_class=Parser)
-    reads = ('status', 'snapshot', 'history')
+    reads = ('status', 'snapshot', 'history', 'progress')
     actions = reads + ('create', 'start', 'resume', 'run', 'complete', 'cancel', 'recover', 'confirm-plan', 'confirm-tier', 'approve-proposal', 'read-baseline', 'register-baseline', 'record-tdd', 'finish-step', 'finish-implementation', 'review', 'update-task', 'adopt-protocol', 'bind-executor', 'repair', 'refine-steps', 'return-task')
     for action in actions:
         command = commands.add_parser(action)
@@ -94,7 +94,7 @@ def main(argv=None):
         from workflow_engine.engine import Engine
         root = Path(args.root).resolve()
         database = Path(args.db).resolve() if args.db else default_db(root)
-        if args.action in ('status', 'snapshot', 'history') and not database.is_file():
+        if args.action in ('status', 'snapshot', 'history', 'progress') and not database.is_file():
             from workflow_engine.model import EngineError
             raise EngineError('NOT_FOUND', '状态库不存在，未执行初始化')
         engine = Engine(root, database)
@@ -103,6 +103,9 @@ def main(argv=None):
             if not isinstance(details, dict):
                 raise ArgumentError('details 必须为任务协议 v2 对象，不得为 null')
             value = engine.create(args.task, {'轻量': 'light', '标准': 'standard', '完整': 'full'}[args.tier], args.acceptance, input_json(args, 'plan'), args.request, details=details)
+        elif args.action == 'progress':
+            from agent_progress import project_progress
+            value = project_progress(engine.status(args.task))
         elif args.action in ('status', 'snapshot', 'history'):
             value = getattr(engine, args.action)(args.task)
         else:
@@ -150,7 +153,8 @@ def main(argv=None):
                 operation = engine.register_baseline
             value = operation(*parameters)
         passed = args.action not in ('run', 'review') or value.get('state') in ('passed', 'review_passed')
-        output = {'ok': passed, 'history' if args.action == 'history' else 'task': value}
+        key = {'history': 'history', 'progress': 'progress'}.get(args.action, 'task')
+        output = {'ok': passed, key: value}
         if document is not None:
             output['document'] = document
         print(json.dumps(output, ensure_ascii=False))

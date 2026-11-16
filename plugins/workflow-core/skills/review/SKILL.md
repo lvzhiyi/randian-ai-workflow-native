@@ -23,6 +23,10 @@ description: 所有档位的 Agent Spec + Standards 双轴评审。验证通过�
 {"round_id":"当前轮次","control_digest":"控制摘要","snapshot":"验证快照","executor":"实际执行者","axes":{"spec":{"conclusion":"pass","findings":[]},"standards":{"conclusion":"pass","findings":[]}}}
 ```
 
+提交评审报告后，无论成功或失败，都按 `workflow` 调用只读 `progress --task` 并同步宿主清单与真实阶段。review_failed 显示暂停/待修复，不把实施项虚标运行中；原范围 repair 后重读当前轮次新增 todo，成功 finish-step 后再同步完成。评审是独立阶段，不因实施清单全 completed 提前宣称通过。工具不可用则给简短聊天清单，不从 UI 回写引擎。
+
+原生清单遵守 `workflow` 的“安全同步与聊天降级”：按真实 schema 核实数量、必填参数和已有列表可见性；单项、空清单、不能安全清理旧项或工具拒绝时使用简短聊天清单，不凑假 todo、不覆盖未知列表、不声称已原生同步。CLI 只是投影，由 Agent 显式调用宿主工具，不提供自动 UI bridge。
+
 ## 结论与交接
 
 两轴分开报告来源、结论、必修/建议、证据与未覆盖项，不跨轴合并掩盖失败。规定验证通过、证据有效且两轴通过后引擎得到 `review_passed`，这是 Agent 终态，不证明无缺陷，不代表人工验收、上线或产品完成。缺任何轴、必修未关闭或证据过期，只能报告当前缺口。

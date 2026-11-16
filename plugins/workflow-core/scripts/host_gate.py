@@ -13,7 +13,8 @@ CURRENT_EVENT = ContextVar("workflow_gate_event", default={})
 from baseline_config import resolve_baselines
 from workflow_config import load
 
-READ_TOOLS = {"Read", "ReadFile", "Glob", "Grep", "rg", "LS", "WebSearch", "WebFetch", "Skill", "AskUserQuestion", "ExitPlanMode"}
+# 原生进度更新只改变宿主展示，不构成引擎通过证据或产品文件写入。
+READ_TOOLS = {"TodoWrite", "update_plan", "Read", "ReadFile", "Glob", "Grep", "rg", "LS", "WebSearch", "WebFetch", "Skill", "AskUserQuestion", "ExitPlanMode"}
 SHELL_TOOLS = {"Bash", "shell", "exec_command", "run_shell_command", "Shell"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"}
 CONFIRM_HELP = ("ENGINE_CONFIRMATION_UNSUPPORTED：当前宿主回调没有可验证的用户确认 schema，不自动批准。"
