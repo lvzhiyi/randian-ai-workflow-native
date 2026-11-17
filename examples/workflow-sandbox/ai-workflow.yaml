@@ -7,8 +7,6 @@ docs:
   cards_dir: docs/product/任务
   overview: docs/product/任务/版本任务总览.md
   dev_docs: docs/development
-spec:
-  tool: none
 review:
   base_branch: main
 design:

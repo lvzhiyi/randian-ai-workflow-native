@@ -138,15 +138,15 @@ def check_cards(root, cards_dir, card_id=DEFAULT_CARD_ID):
 
 
 def collect_docs(root, product_root, dev_docs):
-    """收集需要做链接检查的文档：Agent 入口、规格工具说明、工程规范、产品文档。
+    """收集需要做链接检查的文档：Agent 入口、工程文档、产品文档。
 
     参数 [root]：项目根；[product_root]、[dev_docs]：目录（不存在则跳过）。
     返回：去重后按路径排序的 Markdown 文件列表。
     """
-    paths = [root / name for name in ('AGENTS.md', 'CLAUDE.md', 'openspec/project.md')]
+    paths = [root / name for name in ('AGENTS.md', 'CLAUDE.md')]
     paths = [path for path in paths if path.is_file()]
     if dev_docs.is_dir():
-        paths += sorted(dev_docs.glob('*.md'))
+        paths += sorted(dev_docs.rglob('*.md'))
     if product_root.is_dir():
         paths += sorted(product_root.rglob('*.md'))
     return sorted(set(paths))

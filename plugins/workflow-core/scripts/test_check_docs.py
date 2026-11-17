@@ -68,6 +68,14 @@ class CardTests(ProjectTestCase):
 
 
 class LinkTests(ProjectTestCase):
+    def test_checks_links_in_change_proposals_and_handoffs(self):
+        self.write('docs/development/changes/T1/proposal.md', '[设计](design.md)\n')
+        self.write('docs/development/handoffs/T2.md', '[方案](../changes/T2/proposal.md)\n')
+        code, output = self.run_main('--skip-cards')
+        self.assertEqual(code, 1, output)
+        self.assertIn('docs/development/changes/T1/proposal.md: 链接目标不存在 design.md', output)
+        self.assertIn('docs/development/handoffs/T2.md: 链接目标不存在', output)
+
     def test_broken_link_and_missing_anchor(self):
         self.write('docs/product/b.md', '# 标题 一\n\n## 重复\n\n## 重复\n')
         self.write('docs/product/a.md', '[ok](b.md#标题-一) [dup](b.md#重复-1) '

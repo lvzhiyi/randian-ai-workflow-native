@@ -180,6 +180,14 @@ class LoadTests(unittest.TestCase):
         missing = workflow_config.load(self.root).missing_paths()
         self.assertEqual(missing, ['docs.product_root: docs/product'])
 
+    def test_retired_spec_path_does_not_block_existing_config(self):
+        self.write('ai-workflow.yaml', 'version: 1\nspec:\n  tool: openspec\n  dir: retired-specs\n'
+                                       'handoff:\n  with_change: retired-specs/{change_id}/handoff.md\n'
+                                       '  default: docs/development/handoffs/{task_id}.md\n')
+        config = workflow_config.load(self.root)
+        self.assertEqual(config.missing_paths(), [])
+        self.assertEqual(config.get('handoff.default'), 'docs/development/handoffs/{task_id}.md')
+
 
 if __name__ == '__main__':
     unittest.main()

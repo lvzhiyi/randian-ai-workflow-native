@@ -46,7 +46,6 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 | 配置项 | 依据 | 需要时补读 |
 | --- | --- | --- |
 | 技术栈 | `stack`、`flutter_platforms`、`package_manager` | — |
-| 规格工具 | `spec_tool` | `openspec/project.md` 首段 |
 | 接口工具 | `api_tool` | 开发规范里的接口文档，取项目名称 |
 | 设计工具与权威文件 | `design_tool`、`design_link` | 设计索引或 UI 规范中写明“权威/当前”的那个文件 |
 | 产品文档、交接目录 | `dir`、`product_doc`、`dev_doc` | 项目首页 / 总览文件名；已有文档的实际位置 |
@@ -71,7 +70,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 
 - 默认验证平台（例如只有 `android/ ios/ web/` 目录，没有写明默认验证哪个）
 - 同一文件里有多个候选的权威设计文件
-- 交接目录（项目还没有约定时，推荐有规格变更放变更目录、否则 `docs/development/handoffs/`）
+- 非完整档的交接目录有多个项目约定时，确认 `handoff.default`；没有项目约定时用模板默认值。
 - 标准档、完整档分别跑哪条命令（只找到一条检查命令时可以都用它）
 
 能从仓库确认的不要问。用户没回答的项写“待确认”，不填示例值。
@@ -85,7 +84,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
    - 两者都没有：新建 `AGENTS.md`，并询问是否同时新建只含 `@AGENTS.md` 的 `CLAUDE.md`。
    - 写入前用 `git check-ignore -v <文件>` 检查 `ai-workflow.yaml`、入口文件和 `docs/` 是否被忽略；被忽略时团队拿不到配置，先告诉用户命中的规则，由用户决定改 `.gitignore` 还是换位置，不擅自修改。
 4. 写完运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root . --check-config`：解析错误（退出码 2）或路径不存在必须修正后再交付。
-5. **更新模式**（已有 `ai-workflow.yaml`）：逐项对比，只展示有变化的键；保留用户手写的 `notes` 和注释，不整份覆盖。
+5. **更新模式**（已有 `ai-workflow.yaml`）：逐项对比，只展示有变化的键；保留用户手写的 `notes` 和注释，不整份覆盖。旧 `spec` 和 `handoff.with_change` 只为兼容读取，纳入配置清理清单。既有变更文档按原链接查找。
 
 ## 4. 文档骨架（只补缺失的）
 
@@ -103,7 +102,10 @@ docs/development/testing.md             init
 docs/development/ui.md                  init，有界面时
 docs/development/api-integration.md     init，有后端接口时
 docs/product/任务/<模块>.md              prd-breakdown 首次拆出该模块时
-docs/development/handoffs/<task-id>.md  handoff 首次跨会话交接时
+docs/development/changes/<task-id>/proposal.md  完整档批准并进入实施后
+docs/development/changes/<task-id>/design.md    完整档批准并进入实施后
+docs/development/changes/<task-id>/handoff.md   完整档首次跨会话交接时
+docs/development/handoffs/<task-id>.md  其他档位首次跨会话交接时
 ```
 
 1. **先映射已有文档**：项目已有承担同一角色的文档（如 `doc/测试说明.md`、`wiki/架构.md`），不新建，把它的路径写进 `ai-workflow.yaml` 对应键；文件名不同但职责相同也算已有。

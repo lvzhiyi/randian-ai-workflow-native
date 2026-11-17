@@ -48,11 +48,6 @@ if has pubspec.yaml; then
   say "flutter_sdk_constraint" "$(grep -A3 '^environment:' pubspec.yaml | grep -E 'sdk|flutter' | tr -s ' ' | tr '\n' ' ')"
 fi
 
-# ---- 规格工具 ----
-spec=-
-has openspec && spec="openspec ($(ls openspec/changes 2>/dev/null | grep -vc '^archive$') 个进行中 change)"
-say "spec_tool" "$spec"
-
 # ---- 接口工具 ----
 api=-
 if has .apifox/settings.json; then

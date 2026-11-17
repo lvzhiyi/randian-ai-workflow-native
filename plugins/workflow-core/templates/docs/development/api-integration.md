@@ -7,7 +7,7 @@
 ## 契约来源
 
 - 接口工具：{{例如 Apifox 项目「名称」，项目 ID 见 .apifox/settings.json}}
-- 契约记录位置：有规格变更写在 design/tasks，否则写在关联 Issue。
+- 本次契约变更记录在关联提案、设计文档或 Issue。
 
 ## 项目接入边界
 

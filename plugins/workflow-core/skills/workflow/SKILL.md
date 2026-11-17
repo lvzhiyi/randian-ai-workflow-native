@@ -17,7 +17,7 @@ Cursor AskQuestion 不能作为批准回执；人工在交互终端运行 confir
 
 优先级：用户本次指令 > 项目 `AGENTS.md` / `CLAUDE.md`、`ai-workflow.yaml` 与 `docs/` > 维度插件 > 本插件 > 其他通用技能。冲突先说明，不暗中增加文档、审批或删减检查。
 
-先读 `ai-workflow.yaml`，取得 `docs.*`、`spec.*`、`handoff.*`、`review.base_branch`、`verify.*`、`platforms.*`、`design.*`、`api.*`。术语使用 `docs.glossary`；未确认新词只提议，不擅自入表。配置缺失可调查并建议 `init`，不得猜测必读基线或验证命令后直接实施；配置引用缺失记缺项，不编造路径。
+先读 `ai-workflow.yaml`，取得 `docs.*`、`handoff.default`、`review.base_branch`、`verify.*`、`platforms.*`、`design.*`、`api.*`。术语使用 `docs.glossary`；未确认新词只提议，不擅自入表。配置缺失可调查并建议 `init`，不得猜测必读基线或验证命令后直接实施；配置引用缺失记缺项，不编造路径。
 
 ## 任务路径
 
@@ -46,7 +46,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根
 
 继续与总结前读 `status`，必要时读 `snapshot` / `history`。修改使用最新整数 `version` 和唯一 `request`，绑定任务、当前轮次、尝试和证据；不编造通过命令、不手改数据库绕门禁。每轮明确主执行者，获授权的协作者继承同轮授权并以版本检查更新。脚本缺失、协议不兼容或宿主能力不足须报告，不能静默降级。宿主根据当前 session 的唯一轮次绑定查找任务，不要求在子 shell 中 export 后修改父进程环境。多任务冲突时显式指定任务并重新绑定；不得猜测当前任务。首次创建可用 `--plan-json` / `--details-json`，报告和修复输入可用 `--file-json`，无需实施前先写 JSON 文件。
 
-Claude 的确认请求必须包含 `workflow-confirm:<任务ID>:<轮次ID>:<control_digest>:tier_confirmation`，使用单个 `AskUserQuestion` 问题，用户回答“确认”才登记档位。完整档另用 `ExitPlanMode`，请求包含同格式的 `:approval` 标记，成功批准回调才登记。标记使用当前查询值，任务版本变化后重新请求；不把普通问答当批准。Codex 暂无已验证的原生确认 schema，要求用户在交互终端运行 `confirm-tier` / `approve-proposal`，不让 Agent 代填。两端目前只有模拟回调及真实 CLI 集成测试，不等于双宿主端到端已验证。
+Claude 的确认请求必须包含 `workflow-confirm:<任务ID>:<轮次ID>:<control_digest>:tier_confirmation`，使用单个 `AskUserQuestion` 问题，用户回答“确认”才登记档位。完整档先按 `tiering` 展示提案、技术设计和实施步骤，再用 `ExitPlanMode`，请求包含同格式的 `:approval` 标记，成功批准回调才登记。标记使用当前查询值，任务版本变化后重新请求；不把普通问答当批准。Codex 暂无已验证的原生确认 schema，要求用户在交互终端运行 `confirm-tier` / `approve-proposal`，不让 Agent 代填。两端目前只有模拟回调及真实 CLI 集成测试，不等于双宿主端到端已验证。
 
 人工确认仅为流程证据，不是可信签署；TTY、actor 或模型自报不提供抗程序代答、同账号防篡改或完整写入路径覆盖。插件不是安全沙箱。
 

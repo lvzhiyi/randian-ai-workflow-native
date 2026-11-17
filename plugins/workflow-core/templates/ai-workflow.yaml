@@ -30,12 +30,7 @@ docs:
   dev_docs: docs/development
   glossary: docs/product/术语表.md        # 项目术语表；没有时写“无”
 
-spec:
-  tool: openspec                           # openspec | none
-  dir: openspec
-
 handoff:
-  with_change: openspec/changes/{change_id}/handoff.md
   default: docs/development/handoffs/{task_id}.md
 
 review:

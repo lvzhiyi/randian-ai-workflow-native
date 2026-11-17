@@ -30,7 +30,8 @@ SCHEMA = {
         'product_root': 'path', 'home': 'path', 'requirements': 'path', 'cards_dir': 'path',
         'overview': 'path', 'design_index': 'path', 'dev_docs': 'path', 'glossary': 'path',
     },
-    'spec': {'tool': 'enum:openspec|none', 'dir': 'path'},
+    # 旧配置仍可加载；规格工具路径不再参与工作流或路径检查。
+    'spec': {'tool': 'enum:openspec|none', 'dir': 'str'},
     'handoff': {'with_change': 'str', 'default': 'str'},
     'review': {'base_branch': 'str'},
     'verify': {'docs': 'cmd', 'light': 'cmd', 'standard': 'cmd', 'full': 'cmd'},
