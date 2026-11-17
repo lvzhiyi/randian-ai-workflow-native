@@ -14,7 +14,7 @@
 
 ## 任务与 CLI
 
-`CURSOR_PLUGIN_ROOT` 是插件根，不是项目根。适配器使用 `CURSOR_PROJECT_DIR` 或 `workspace_roots`，Shell 的 `tool_input.working_directory` 保留实际执行目录，并从该目录查找最近的 `ai-workflow.yaml`，不折叠为工作区根；`CURSOR_PROJECT_DIR` 只是默认目录，合法子目录可覆盖，兄弟目录等真正冲突仍拒绝；不采用可能指向插件的 cwd。多根缺少明确选择、目录不一致或格式无效时 preToolUse 拒绝。只有明确找到 `ai-workflow.yaml` 才启用门禁与轨迹采集；未接入项目旁路允许，便于初始化。已接入项目的配置、任务或输入错误不降级为旁路。
+`CURSOR_PLUGIN_ROOT` 是插件根，不是项目根。适配器使用 `CURSOR_PROJECT_DIR` 或 `workspace_roots`，Shell 的 `tool_input.working_directory` 保留实际执行目录，并从该目录查找最近的 `ai-workflow.yaml`，不折叠为工作区根；`CURSOR_PROJECT_DIR` 只是默认目录，合法子目录可覆盖，兄弟目录等真正冲突仍拒绝；不采用可能指向插件的 cwd。多根缺少明确选择、目录不一致或格式无效时 preToolUse 拒绝。只有明确找到 `ai-workflow.yaml` 才启用门禁；未接入项目旁路允许，便于初始化。已接入项目的配置、任务或输入错误不降级为旁路。
 
 `conversation_id` 原样映射引擎 `session_id`，执行者通过 CLI `bind-executor --session <conversation_id>` 绑定。每轮会话唯一任务 lookup 沿用共享逻辑，歧义不猜测。读取基线仍由 CLI `read-baseline` 输出完整正文并登记；Cursor Read 输出没有已验证的完整读取回执契约，不会自动登记。
 
@@ -26,16 +26,16 @@ WORKFLOW_HOST=cursor python3 "/绝对路径/plugins/workflow-core/scripts/workfl
 
 共享门禁只为固定引擎脚本允许这个精确环境前缀，不允许任意环境包装或 shell 拼接。引擎默认数据库仍沿用共享 `$CODEX_HOME/workflow-engine`（默认 `~/.codex/workflow-engine`），并未实现宿主隔离；如用 `WORKFLOW_ENGINE_HOME` 或 `--db`，必须确保门禁、CLI 和看板读取同一库，不能只对某次 CLI 使用另一个库后期待自动关联。
 
-Cursor AskQuestion 没有稳定批准 schema，不能套用 Claude answers/approved；用户应在自己的交互终端运行 `confirm-tier`，完整档再运行 `approve-proposal --digest CONTROL_DIGEST`，携带当前任务、版本、唯一请求和 actor。普通问答、工具输出字符串及伪造的 Claude 回执都不批准。这是人工流程防护栏，TTY 和 actor 不是可信签名，也不抵御同账号程序代答。
+Agent 用 `request-confirmation` 登记当前任务版本和 `conversation_id`，随后展示档位。用户在聊天中单独回复 `选轻量档`、`选标准档` 或 `选完整档`，由 `beforeSubmitPrompt` 登记。完整档方案就绪后，另登记 `--kind approval`，让用户回复 `批准方案`。Agent 用 `status` 核实登记结果。`AskQuestion` 的普通工具结果继续只用于问答，因为 Cursor 尚未文档化可用于定档的选择回执。
 
 ## 支持边界
 
 - preToolUse 显式输出 allow/deny，绝不输出 ask；Git 调查的 updated_input 保留原字段并禁用外部 diff/textconv。
 - Read/Glob/Grep/rg 与 AskQuestion 允许调查；未知 MCP、Shell 写命令、Task 仍须通过共享引擎就绪检查，explore 名称不构成只读证明。Write/Delete/Edit 只接受非空字符串目标 `file_path`、`path`、`target_file`，未知 schema 拒绝；目标范围、会话和基线由共享门禁验证。
 - Task 仅在父任务已绑定且当前轮次授权就绪时允许委派；子 Agent 不因此取得独立授权，必须使用其实际会话重新绑定、读取基线。subagentStart 仅返回合法的 permission/user_message，提醒不等于全部子工具路径已覆盖；Cursor 未回调的写入路径不在保证内。插件不是系统沙箱。
-- sessionStart 返回 env 与 additional_context；post 返回 additional_context。stop 只记录轨迹并返回 `{}`，不伪造 blocking，也不发 followup_message，避免追问循环。失败事件 error_message 映射 trace error。
-- 仅已接入项目的 Cursor 回调轨迹使用数值 Unix 时间戳写入 `~/.cursor/workflow-trace/events`，不参与引擎授权。看板 CLI 同样使用 `WORKFLOW_HOST=cursor` 才读取同源数据；`WORKFLOW_TRACE_DIR` 可显式覆盖。输出和归属查询有界，不为每次只读工具计算任务全量哈希。Cursor 不新增 metrics 采集承诺。
+- sessionStart 返回 env 与 additional_context；postToolUse 返回适用的 additional_context。
+- 看板 CLI 使用 `WORKFLOW_HOST=cursor` 将服务运行信息存放在 `~/.cursor/workflow-dashboard`，任务数据来自共享引擎数据库。
 
 ## 验证口径
 
-`test_cursor_gate.py` 使用官方输入形状模拟进程回调，并连接真实 Engine/CLI 验证绑定、read-baseline、start 和跨会话拒绝；还验证清单、格式故障拒绝、字符串工具结果、多个项目根和 Trace/看板同源。`python3 scripts/check.py` 覆盖根 Cursor marketplace JSON。上述是协议模拟与本机引擎集成，不是实际 Cursor E2E；真实安装、工具 schema、子 Agent 传播和用户终端交互仍需人工验收。
+`test_cursor_gate.py` 使用官方输入形状模拟进程回调，并连接真实 Engine/CLI 验证绑定、read-baseline、start 和跨会话拒绝；还验证清单、格式故障拒绝、字符串工具结果、以及多个项目根。`python3 scripts/check.py` 覆盖根 Cursor marketplace JSON。上述是协议模拟与本机引擎集成，不是实际 Cursor E2E；真实安装、工具 schema、子 Agent 传播和用户终端交互仍需人工验收。

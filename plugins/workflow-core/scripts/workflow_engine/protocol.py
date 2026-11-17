@@ -233,11 +233,27 @@ class ProtocolMixin:
             self.store.save(db, task, action, request, payload)
             return task
 
-    def confirm_tier(self, task_id, version, request, actor):
+    def confirm_tier(self, task_id, version, request, actor, selected_tier=None):
         def apply(task):
             require(isinstance(actor, str) and actor.strip(), 'INPUT_INVALID', '需人工流程操作者')
-            self._record(task, 'tier_confirmation', dict(actor=actor, tier=task['tier'], human_process=True))
-        return self._change('confirm_tier', task_id, version, request, actor, apply)
+            data = dict(actor=actor, human_process=True)
+            if selected_tier is not None:
+                require(selected_tier in ('light', 'standard', 'full'), 'INPUT_INVALID', '档位无效')
+                require(task['state'] == 'created' and not evidence(task, 'tier_confirmation'), 'STATE_INVALID', '当前轮次未等待定档')
+                if selected_tier != task['tier']:
+                    task['tier'] = selected_tier
+                    try:
+                        task['verify_config_digest'] = enforce(self.root, selected_tier, task['plan'])
+                    except EngineError as error:
+                        if error.code not in ('VERIFY_REQUIRED', 'VERIFY_CONFIG'):
+                            raise
+                        # 先记住用户的选择，由 Agent 补齐该档位的验证计划。
+                        task['verify_config_digest'] = None
+                    self._invalidate_control(task)
+                data['selected'] = True
+            self._record(task, 'tier_confirmation', dict(data, tier=task['tier']))
+        payload = actor if selected_tier is None else [actor, selected_tier]
+        return self._change('confirm_tier', task_id, version, request, payload, apply)
 
     def approve_proposal(self, task_id, version, request, actor, control_digest):
         def apply(task):
@@ -277,6 +293,8 @@ class ProtocolMixin:
             return super().start(task_id, expected_version, request_id)
         def apply(task):
             require(not readiness(task), 'MISSING', '就绪条件缺失：' + ', '.join(readiness(task)))
+            signature = enforce(self.root, task['tier'], task['plan'])
+            require(signature == task.get('verify_config_digest'), 'VERIFY_CONFIG_CHANGED', '验证配置变化须更新任务验证计划')
             require(task['state'] in ('created', 'implementing', 'stale'), 'STATE_INVALID', '当前阶段不能实施')
             task.update(state='implementing', phase='implementation')
         return self._change('start', task_id, expected_version, request_id, None, apply)
@@ -330,25 +348,37 @@ class ProtocolMixin:
             task.update(state='review_passed' if passed else 'review_failed', phase='done' if passed else 'review')
         return self._change('review', task_id, version, request, report, apply)
 
+    def _invalidate_control(self, task):
+        task['control_digest'] = control(task)
+        for item in current(task)['evidence']:
+            item['valid'] = False
+        for attempt in current(task)['attempts']:
+            if attempt['status'] == 'passed':
+                attempt['status'] = 'invalidated'
+        current(task)['todos'] = [dict(id=s['id'], title=s['title'], status='pending') for s in task.get('steps', [])]
+        task.update(state='created', phase='planning', results=[])
+
     def update_task(self, task_id, version, request, changes):
         def apply(task):
             allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note', 'tier', 'acceptance', 'plan'}
             require(isinstance(changes, dict) and set(changes) <= allowed, 'INPUT_INVALID', '未知控制字段')
-            old = task['control_digest']
+            # 初次补齐定档后才需要的材料时，沿用用户对同一档位和范围的选择。
+            changed = {key for key, value in changes.items() if value != task.get(key)} - {'note'}
+            fillable = set(task['missing']) & {'steps', 'proposal'}
+            if 'verify_config' in task['missing']:
+                fillable.add('plan')
+            selection = next((e for e in evidence(task, 'tier_confirmation') if e['data'].get('selected')), None)
+            keep_selection = (selection and task['state'] == 'created' and changed <= fillable
+                              and not evidence(task, 'approval'))
             task.update(copy.deepcopy(changes))
             require(task['tier'] in ('light', 'standard', 'full'), 'INPUT_INVALID', '档位无效')
             validate_steps(task.get('steps', []))
             task['plan_digest'] = validate_plan(task['plan'], task['acceptance'])
             task['verify_config_digest'] = enforce(self.root, task['tier'], task['plan'])
-            task['control_digest'] = control(task)
-            if old != task['control_digest']:
-                for item in current(task)['evidence']:
-                    item['valid'] = False
-                for attempt in current(task)['attempts']:
-                    if attempt['status'] == 'passed':
-                        attempt['status'] = 'invalidated'
-                current(task)['todos'] = [dict(id=s['id'], title=s['title'], status='pending') for s in task.get('steps', [])]
-                task.update(state='created', phase='planning', results=[])
+            if task['control_digest'] != control(task):
+                self._invalidate_control(task)
+                if keep_selection:
+                    self._record(task, 'tier_confirmation', dict(selection['data'], carried_from=selection['id']))
         return self._change('update_task', task_id, version, request, changes, apply)
 
     def bind_executor(self, task_id, version, request, executor, session_id):

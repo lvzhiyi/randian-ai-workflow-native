@@ -21,7 +21,8 @@ CLI `create --details` 必填且必须为 JSON 对象（包括拒绝 null）；C
 所有修改方法前缀均为 `(task_id, expected_version, request_id, ...)`：
 
 - `create(task_id,tier,acceptance,plan,request_id,details=...)`：登记任务，不偷偷补齐目标和来源。任务字段 `goal/scope/acceptance/source/dependencies` 缺失呈现 missing；依赖是 `{id,status:"done"}` 列表，空列表表示无依赖，未完成依赖阻止开始。
-- `confirm_tier(..., actor)`：三档均需人工流程确认当前档位。
+- `confirm_tier(..., actor, selected_tier=None)`：确认当前档位，或在待定档轮次内原子地记录用户选中的档位。选中档位需要不同的步骤、方案或验证计划时，保留选择并报告待补项。
+- `request-confirmation`：由 Agent 为当前任务、轮次、版本及绑定会话准备聊天确认。命令仅登记请求。宿主通过用户消息钩子处理档位回复或完整档的单独方案批准。
 - `approve_proposal(..., actor, control_digest)`：完整档专用批准。方案必需 goal、scope、impact、risk、rollback、acceptance，以及任务结构化 steps；批准绑定当前轮次和控制摘要。标准档 3–5 步短计划无需方案审批，轻量至少一项必要实施记录。
 - `register_baseline(..., receipt)`：供可信读取组件登记成功完整读取回执。receipt 为 `{path,sha256,bytes_read,complete:true,executor,session_id,round_id}`，必须匹配当前 executor/session，登记时引擎附加 binding_version；readiness 只使用当前绑定代次的基线。路径必须在声明 baseline 内、为根目录内普通非链接文件；当前内容哈希和字节数必须一致。缺失、截断、错误轮次不可用。此接口验证回执一致性，不证明阅读理解或组件身份。
 - `bind_executor(...,executor,session_id)`：显式绑定轮次主执行者与会话；切换任一字段递增 binding_version，旧读取与 TDD 记录不能借用，即使切回旧身份仍须重新读取。人工档位确认和方案批准保持有效，当前验证/评审成功失效。宿主可检查 rounds[-1].executor/session_id/binding_version 和 missing 中 executor_binding/baseline。绑定是流程属性，不是身份认证。
@@ -32,7 +33,7 @@ CLI `create --details` 必填且必须为 JSON 对象（包括拒绝 null）；C
 - `repair(...,steps,reason)`：仅 failed/review_failed/stale 可用；steps 是非空 `{id,title}` 数组，ID 必须与本轮已有 todo 不重复。原范围授权内追加修复 todo 与 repair attempt，进入 implementing；不改变 scope/control_digest，不重新批准。当前绑定的基线失效时须先重读。完成修复步骤 → finish_implementation → run → review，不能跳过新验证。扩大范围仍须 update_task 并重新授权。
 - `run(...)`：沿用真实 runner、检查计划和快照；执行前后内容一致且每项真实退出零，才得到 passed。失败、超时、异常分别进入 attempt 明细；同范围重跑追加新 attempt。执行期间不持数据库写锁。
 - `review(...,report)`：验证通过且证据仍有效后，双轴结构化评审；通过得到 review_passed，是 Agent 终态，不再要求人工交付。必修未解决不能通过，也不能在重试报告中删除后逃逸；同轴同 ID 显式 resolved=true 才关闭。
-- `update_task(...,changes)`：只接受明确允许的任务字段。goal/scope/tier/acceptance/plan/source/dependencies/baseline/steps/proposal 改变控制摘要，撤销当前批准及相关证据、重置 todos，旧记录保留。纯展示措辞使用 note，不改变授权。方案文件字节与批准不直接绑定，JSON 语义内容才绑定；proposal 内字段修改目前保守视为实质变更。
+- `update_task(...,changes)`：只接受明确允许的任务字段。goal/scope/tier/acceptance/plan/source/dependencies/baseline/steps/proposal 改变控制摘要，撤销当前批准及相关证据、重置 todos，旧记录保留。选档后首次补齐当前缺失的步骤、方案或验证计划，可以沿用同一档位选择。纯展示措辞使用 note。方案批准绑定 proposal 的 JSON 语义内容。
 - `resume(...)`：同轮继续，只登记活动，不跳门禁、不推测阻塞。`return_task(...,reason,actor)`：人工退回新轮次，旧轮保留、新轮无证据。cancel 后只能人工退回，start/run/resume 均不能自动复活。
 - `cancel(...)`：取消并保持历史；running 期间拒绝取消，避免误报子进程已经停止。`recover(...)` 只恢复已死亡所有者的孤立 running，记 error attempt，不能把异常当成功。
 - `status(task_id)` / `snapshot(task_id)`：只读快照查询，核对当前文件和基线，返回 stale/invalidated 投影但不写任务、事件或版本。`history(task_id)`：只读历史事件。观察失效在下一次成功修改时落库，查询版本仍可用于 CAS。活动缺失不等于阻塞；activity 是明确事件，不根据静默时长造 blocked。

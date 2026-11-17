@@ -45,9 +45,24 @@ class PlanningGateTests(unittest.TestCase):
         valid_patch = "*** Begin Patch\n*** Add File: docs/product/任务/账户.md\n+文档\n*** End Patch"
         self.assertIsNone(host_gate.pre_tool(self.event("apply_patch", patch=valid_patch)))
         self.assertIsNone(host_gate.pre_tool(self.event("Edit", file_path=str(self.root / "README.md"))))
-        for tool, data in [("Shell", {"command": "printf x > README.md"}), ("mcp__update", {"path": "README.md"}), ("Write", {"file_path": "docs/product/任意.md"})]:
-            self.assertIsNotNone(host_gate.pre_tool(self.event(tool, **data)))
+        for tool, data in [("Shell", {"command": "printf x > README.md"}), ("mcp__update", {"path": "README.md"})]:
+            event = self.event(tool, **data)
+            self.assertIn("ENGINE_PLANNING_TOOL_UNSUPPORTED", host_gate.pre_tool(event))
+            self.assertIn("ENGINE_TASK_UNBOUND", host_gate.pre_tool(dict(event, session_id="other")))
+        self.assertIn("ENGINE_PLANNING_TARGET_DENIED", host_gate.pre_tool(self.event("Write", file_path="docs/product/任意.md")))
         self.run_cli("close")
+        self.assertIn("ENGINE_TASK_UNBOUND", host_gate.pre_tool(self.event(file_path="README.md")))
+
+    def test_planning_help_is_narrow_and_has_no_side_effects(self):
+        from workflow_planning_cli import session_path
+        record = session_path(self.root, "s1")
+        for host in ("cursor", "codex", "claude"):
+            for suffix in ("--help", "-h", "open --help", "close -h", "status --help"):
+                command = f"WORKFLOW_HOST={host} python3 {self.cli} {suffix}"
+                self.assertIsNone(host_gate.pre_tool(self.event("Shell", command=command)))
+        self.assertFalse(record.exists())
+        for command in (f"python3 /tmp/workflow_planning_cli.py open --help", f"python3 {self.cli} open --help --path README.md", f"python3 {self.cli} open --help && touch x", f"env WORKFLOW_HOST=cursor python3 {self.cli} --help"):
+            self.assertIsNotNone(host_gate.pre_tool(self.event("Shell", command=command)), command)
         self.assertIsNotNone(host_gate.pre_tool(self.event(file_path="README.md")))
 
     def test_session_root_expiry_and_paths_fail_closed(self):

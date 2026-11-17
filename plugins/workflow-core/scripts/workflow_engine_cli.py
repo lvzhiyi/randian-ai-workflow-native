@@ -29,7 +29,7 @@ def parser():
     result.add_argument('--db')
     commands = result.add_subparsers(dest='action', required=True, parser_class=Parser)
     reads = ('status', 'snapshot', 'history', 'progress')
-    actions = reads + ('create', 'start', 'resume', 'run', 'complete', 'cancel', 'recover', 'confirm-plan', 'confirm-tier', 'approve-proposal', 'read-baseline', 'register-baseline', 'record-tdd', 'finish-step', 'finish-implementation', 'review', 'update-task', 'adopt-protocol', 'bind-executor', 'repair', 'refine-steps', 'return-task')
+    actions = reads + ('create', 'start', 'resume', 'run', 'complete', 'cancel', 'recover', 'confirm-plan', 'confirm-tier', 'request-confirmation', 'approve-proposal', 'read-baseline', 'register-baseline', 'record-tdd', 'finish-step', 'finish-implementation', 'review', 'update-task', 'adopt-protocol', 'bind-executor', 'repair', 'refine-steps', 'return-task')
     for action in actions:
         command = commands.add_parser(action)
         command.add_argument('--task', required=True)
@@ -54,7 +54,10 @@ def parser():
             group.add_argument('--file-json')
         if action in ('read-baseline', 'bind-executor'):
             command.add_argument('--executor', required=True)
+        if action in ('read-baseline', 'bind-executor', 'request-confirmation'):
             command.add_argument('--session', required=True)
+        if action == 'request-confirmation':
+            command.add_argument('--kind', choices=('tier_confirmation', 'approval'), required=True)
         if action == 'read-baseline':
             command.add_argument('--path', required=True)
             command.add_argument('--max-bytes', type=int, default=65536)
@@ -94,7 +97,9 @@ def main(argv=None):
         from workflow_engine.engine import Engine
         root = Path(args.root).resolve()
         database = Path(args.db).resolve() if args.db else default_db(root)
-        if args.action in ('status', 'snapshot', 'history', 'progress') and not database.is_file():
+        if args.action == 'request-confirmation' and args.db and database != default_db(root).resolve():
+            raise ArgumentError('聊天确认须与宿主使用同一默认状态库')
+        if args.action in ('status', 'snapshot', 'history', 'progress', 'request-confirmation') and not database.is_file():
             from workflow_engine.model import EngineError
             raise EngineError('NOT_FOUND', '状态库不存在，未执行初始化')
         engine = Engine(root, database)
@@ -108,6 +113,9 @@ def main(argv=None):
             value = project_progress(engine.status(args.task))
         elif args.action in ('status', 'snapshot', 'history'):
             value = getattr(engine, args.action)(args.task)
+        elif args.action == 'request-confirmation':
+            from host_gate import request_chat_confirmation
+            value = request_chat_confirmation(root, engine.status(args.task), args.version, args.session, args.kind, args.request)
         else:
             task = engine.status(args.task)
             if task.get('protocol_version') != 2 and args.action != 'adopt-protocol':
@@ -153,7 +161,7 @@ def main(argv=None):
                 operation = engine.register_baseline
             value = operation(*parameters)
         passed = args.action not in ('run', 'review') or value.get('state') in ('passed', 'review_passed')
-        key = {'history': 'history', 'progress': 'progress'}.get(args.action, 'task')
+        key = {'history': 'history', 'progress': 'progress', 'request-confirmation': 'confirmation'}.get(args.action, 'task')
         output = {'ok': passed, key: value}
         if document is not None:
             output['document'] = document

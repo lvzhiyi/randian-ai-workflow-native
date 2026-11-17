@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import tempfile
 import uuid
 from contextvars import ContextVar
 
@@ -16,11 +17,12 @@ from workflow_config import load
 # 原生进度更新只改变宿主展示，不构成引擎通过证据或产品文件写入。
 READ_TOOLS = {"TodoWrite", "update_plan", "Read", "ReadFile", "Glob", "Grep", "rg", "LS", "WebSearch", "WebFetch", "Skill", "AskUserQuestion", "ExitPlanMode"}
 SHELL_TOOLS = {"Bash", "shell", "exec_command", "run_shell_command", "Shell"}
+PLANNING_EDIT_TOOLS = {"Write", "Edit", "apply_patch"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"}
-CONFIRM_HELP = ("ENGINE_CONFIRMATION_UNSUPPORTED：当前宿主回调没有可验证的用户确认 schema，不自动批准。"
-                "请由用户运行 CLI confirm-tier；完整档另运行 approve-proposal --digest CONTROL_DIGEST。"
-                "CLI 需要 --task、--version、--request、--actor；批准绑定当前任务/轮次/control_digest。"
-                "这是人工流程防护栏，不是可信签署。")
+TIER_LABELS = {"轻量档": "light", "标准档": "standard", "完整档": "full"}
+CONFIRM_HELP = ("ENGINE_CONFIRMATION_UNSUPPORTED：当前宿主回调没有匹配的用户确认。"
+                "请用 request-confirmation 准备聊天确认，并在 Agent 窗口展示回复选项。"
+                "确认绑定当前任务、轮次、版本及控制摘要。")
 
 
 def project_root(cwd):
@@ -34,37 +36,83 @@ def project_root(cwd):
     return None
 
 
+def readonly_segments(command):
+    """只拆分引号外的 &&；每段仍走严格解析，拒绝其他控制流和空段。"""
+    if not isinstance(command, str):
+        return None
+    quote, escaped, start = None, False, 0
+    segments = []
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote != "'":
+            escaped = True
+        elif char in {"'", '"'}:
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+        elif quote is None and command[index:index + 2] == "&&":
+            segments.append(command[start:index])
+            index += 1
+            start = index + 1
+        index += 1
+    segments.append(command[start:])
+    return segments if all(shell_tokens(part) for part in segments) else None
+
+
 def safe_shell_input(event):
-    """Git 调查命令强制关闭外部 diff/textconv，回传宿主更新后的输入。"""
+    """对每段 Git 调查禁用外部 diff/textconv，保留宿主原输入字段。"""
     data = event.get("tool_input") or {}
-    command = shell_command(data)
-    args = shell_tokens(command)
-    if not args or args[0] != "git":
+    segments = readonly_segments(shell_command(data))
+    if not segments:
         return None
-    index = 2 if len(args) > 1 and args[1] == "--no-pager" else 1
-    if len(args) <= index or args[index] not in {"diff", "log", "show"}:
+    # 组合只开放纯只读查询；不能借此串联规划登记或引擎修改。
+    if len(segments) > 1 and not all(readonly_single(part) for part in segments):
         return None
-    if any(a.startswith(("--ext-diff", "--textconv", "--output")) for a in args):
+    commands, changed = [], False
+    for part in segments:
+        args = shell_tokens(part)
+        index = 2 if args[:2] == ["git", "--no-pager"] else 1
+        if args[0] == "git" and len(args) > index and args[index] in {"diff", "log", "show"}:
+            if any(a.startswith(("--ext-diff", "--textconv", "--output")) for a in args):
+                return None
+            args[index + 1:index + 1] = ["--no-ext-diff", "--no-textconv"]
+            changed = True
+        commands.append(shlex.join(args))
+    if not changed:
         return None
-    args[index + 1:index + 1] = ["--no-ext-diff", "--no-textconv"]
-    changed = dict(data)
+    result = dict(data)
     key = "command" if "command" in data else "cmd"
     original = data.get(key)
-    normalized = shlex.join(args)
-    changed[key] = [*original[:2], normalized] if isinstance(original, list) else normalized
-    return changed
+    normalized = " && ".join(commands)
+    result[key] = [*original[:2], normalized] if isinstance(original, list) else normalized
+    return result
 
 
 def readonly_shell(command):
-    """只放行有限调查命令，拒绝重定向、子命令、外部过滤器和隐式执行。"""
+    """组合中的全部命令必须独立只读，不因首段合法就开放后续写入。"""
+    segments = readonly_segments(command)
+    return bool(segments) and all(readonly_single(part) for part in segments)
+
+
+def readonly_single(command):
+    """有限调查命令白名单；拒绝重定向、子命令和隐式执行。"""
     args = shell_tokens(command)
-    if not args:
-        return False
     if not args:
         return False
     if args[0] == "git" and len(args) > 1 and args[1] == "--no-pager":
         args.pop(1)
     if args[0] == "git":
+        if args[1:] in (["remote", "-v"], ["remote", "--verbose"], ["remote"]):
+            return True
+        if len(args) >= 3 and args[1] == "symbolic-ref":
+            rest = args[2:]
+            if rest[0] == "--short":
+                rest = rest[1:]
+            return len(rest) == 1 and not rest[0].startswith("-")
         return len(args) >= 2 and args[1] in {"status", "diff", "log", "show", "ls-files", "rev-parse"} and all(
             not a.startswith(("--output", "--ext-diff", "--textconv", "--exec", "--config", "--upload-pack", "--open-files-in-pager", "--paginate")) for a in args[2:])
     if args[0] in {"pwd", "ls", "cat", "head", "tail", "wc", "stat"}:
@@ -130,7 +178,11 @@ def dashboard_command(command):
 
 def planning_command(command, event):
     """仅当前项目和宿主会话可登记；不将登记视为真人身份认证。"""
-    parsed = command_options(fixed_command(command, "workflow_planning_cli.py"), {"open", "close", "status"},
+    args = fixed_command(command, "workflow_planning_cli.py")
+    # 帮助在 argparse 处理时即退出，不登记授权，也不要求会话绑定。
+    if args in (["--help"], ["-h"]) or (args and len(args) == 2 and args[0] in {"open", "close", "status"} and args[1] in {"--help", "-h"}):
+        return True
+    parsed = command_options(args, {"open", "close", "status"},
                              {"--root", "--session", "--operation", "--path", "--ttl", "--config-json"}, {"--path"})
     if not parsed:
         return False
@@ -171,10 +223,87 @@ def init_read_command(command, event):
     return len(remaining) == 2 and remaining[0] == "--root" and same_root(remaining[1])
 
 
-def pending_path(root, session):
+def pending_path(root, session, channel=""):
     from workflow_engine_cli import default_db
-    name = hashlib.sha256(str(session).encode()).hexdigest()
+    name = hashlib.sha256((channel + str(session)).encode()).hexdigest()
     return default_db(root).parent / ("confirmation-" + name + ".json")
+
+
+def save_pending(path, pending):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(dir=path.parent, mode="w", encoding="utf-8", delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            json.dump(pending, handle, ensure_ascii=False)
+            handle.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def confirmation_target(task, action):
+    return dict(task=task["id"], round=task["current_round"], digest=task["control_digest"],
+                version=task["version"], action=action)
+
+
+def matches_confirmation(event, task, pending):
+    return not binding_error(event, task) and all(
+        value == pending.get(key) for key, value in confirmation_target(task, pending["action"]).items())
+
+
+def request_chat_confirmation(root, task, version, session, action, request):
+    """登记待回应的版本；CLI 不写入任何人工确认凭据。"""
+    from workflow_engine.model import EngineError
+    host = os.environ.get("WORKFLOW_HOST", "claude")
+    if host not in {"cursor", "codex", "claude"} or binding_error({"session_id": session}, task) or task["version"] != version:
+        raise EngineError("CONFIRMATION_INVALID", "确认请求须使用当前任务版本和绑定会话")
+    missing = set(task["missing"])
+    if (task["state"] != "created" or action not in {"tier_confirmation", "approval"} or action not in missing or
+            (action == "approval" and {"tier_confirmation", "proposal", "steps", "verify_config"} & missing)):
+        raise EngineError("CONFIRMATION_INVALID", "当前任务未等待此确认，或方案尚未就绪")
+    pending = dict(confirmation_target(task, action), request=request)
+    save_pending(pending_path(root, session, host + ":chat:"), pending)
+    replies = ["选" + label for label in TIER_LABELS] if action == "tier_confirmation" else ["批准方案"]
+    return dict(pending, replies=replies)
+
+
+def chat_confirmation(event, root):
+    """只消费宿主提交的独立用户消息，不解析 Agent 或工具正文。"""
+    from workflow_engine.model import EngineError
+    prompt, session = event.get("prompt"), event.get("session_id")
+    if not isinstance(prompt, str) or not isinstance(session, str) or not session:
+        return None
+    reply = prompt.strip()
+    tier = TIER_LABELS.get(reply[1:]) if reply.startswith("选") else None
+    action = "approval" if reply == "批准方案" else "tier_confirmation" if tier else None
+    if not action:
+        return None
+    host = os.environ.get("WORKFLOW_HOST", "claude")
+    path = pending_path(root, session, host + ":chat:")
+    if not path.is_file():
+        return None
+    pending = json.loads(path.read_text(encoding="utf-8"))
+    if pending["action"] != action:
+        return None
+    CURRENT_EVENT.set(event)
+    try:
+        task = load_task(root)
+        if not matches_confirmation(event, task, pending):
+            return "ENGINE_CONFIRMATION_REJECTED：任务版本或会话已变化，请重新展示确认选项。"
+        record_confirmation(root, pending, host + " 用户聊天回复", tier)
+    except (EngineError, ValueError) as error:
+        return "ENGINE_CONFIRMATION_REJECTED：" + str(error)
+    return "ENGINE_CONFIRMATION_RECORDED：已登记当前任务的" + ("方案批准。" if action == "approval" else "档位选择。")
+
+
+def record_confirmation(root, pending, actor, tier=None):
+    from workflow_engine.engine import Engine
+    from workflow_engine_cli import default_db
+    engine = Engine(root, default_db(root))
+    args = (pending["task"], pending["version"], pending["request"], actor)
+    if pending["action"] == "approval":
+        return engine.approve_proposal(*args, pending["digest"])
+    return engine.confirm_tier(*args) if tier is None else engine.confirm_tier(*args, tier)
 
 
 def confirmation_markers(event):
@@ -183,12 +312,37 @@ def confirmation_markers(event):
     return text, re.findall(r"workflow-confirm:[^\s\"<>]+", text)
 
 
+def native_confirmation_host(event):
+    host = os.environ.get("WORKFLOW_HOST", "claude")
+    tool = event.get("tool_name")
+    if host == "codex" and tool == "request_user_input":
+        return host
+    if host == "claude" and tool in {"AskUserQuestion", "ExitPlanMode"}:
+        return host
+    return None
+
+
+def native_question(data):
+    questions = data.get("questions")
+    if isinstance(questions, list) and len(questions) == 1 and isinstance(questions[0], dict):
+        return questions[0]
+    return {}
+
+
+def offered_tiers(question):
+    options = question.get("options")
+    return (isinstance(options, list) and len(options) == 3 and
+            all(isinstance(option, dict) and isinstance(option.get("label"), str) for option in options) and
+            {option["label"] for option in options} == TIER_LABELS.keys())
+
+
 def prepare_confirmation(event, root):
     """将待确认目标持久化；回执只消费相同工具调用及当前版本请求。"""
     text, markers = confirmation_markers(event)
     if "workflow-confirm:" not in text:
         return None
-    if os.environ.get("WORKFLOW_HOST") in {"codex", "cursor"}:
+    host = native_confirmation_host(event)
+    if host is None:
         return None
     try:
         task = load_task(root)
@@ -201,12 +355,17 @@ def prepare_confirmation(event, root):
         marker = "workflow-confirm:" + task["id"] + ":" + task["current_round"] + ":" + task["control_digest"] + ":" + action
         if markers != [marker] or text.count("workflow-confirm:") != 1 or not event.get("tool_use_id"):
             return "ENGINE_CONFIRMATION_REQUIRED：确认请求必须包含 " + marker + "，并提供宿主 tool_use_id。"
+        question = native_question(data)
+        question_text = question.get("question")
+        if action == "tier_confirmation" and ("answers" in data or question.get("multiSelect") or
+                not isinstance(question_text, str) or marker not in question_text.split()):
+            return "ENGINE_CONFIRMATION_REQUIRED：定档须使用用户填写的单选问题。"
+        if host == "codex" and (not offered_tiers(question) or not isinstance(question.get("id"), str) or not question["id"]):
+            return "ENGINE_CONFIRMATION_REQUIRED：定档请求须提供轻量档、标准档和完整档。"
         path = pending_path(root, event.get("session_id"))
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        pending = {"task": task["id"], "round": task["current_round"], "digest": task["control_digest"], "version": task["version"], "tool": event["tool_name"], "call": event["tool_use_id"], "input": data, "action": action}
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(pending, handle, ensure_ascii=False)
+        pending = dict(confirmation_target(task, action), host=host, tool=event["tool_name"],
+                       call=event["tool_use_id"], input=data, request=uuid.uuid4().hex)
+        save_pending(path, pending)
         return None
     except Exception as exc:
         return "ENGINE_CONFIRMATION_REQUIRED：" + str(exc) + "；" + CONFIRM_HELP
@@ -216,9 +375,12 @@ def complete_confirmation(event):
     text, markers = confirmation_markers(event)
     if "workflow-confirm:" not in text:
         return None
-    if os.environ.get("WORKFLOW_HOST") in {"codex", "cursor"}:
+    host = native_confirmation_host(event)
+    if host is None:
         return CONFIRM_HELP
     root = project_root(event.get("cwd"))
+    if root is None:
+        return None
     path = pending_path(root, event.get("session_id"))
     if not path.is_file():
         return CONFIRM_HELP
@@ -227,25 +389,37 @@ def complete_confirmation(event):
     expected_marker = "workflow-confirm:" + pending["task"] + ":" + pending["round"] + ":" + pending["digest"] + ":" + pending["action"]
     if markers != [expected_marker] or text.count("workflow-confirm:") != 1:
         return CONFIRM_HELP
-    if (pending["call"] != event.get("tool_use_id") or pending["tool"] != event.get("tool_name") or pending["input"] != event.get("tool_input") or not isinstance(response, dict) or response.get("error") or response.get("is_error")):
+    if host == "codex" and isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except ValueError:
+            return CONFIRM_HELP
+    if (pending.get("host") != host or pending["call"] != event.get("tool_use_id") or
+            pending["tool"] != event.get("tool_name") or pending["input"] != event.get("tool_input") or
+            not isinstance(response, dict) or response.get("error") or response.get("is_error")):
         return CONFIRM_HELP
-    if pending["tool"] == "AskUserQuestion":
-        questions = pending["input"].get("questions", [])
+    tier = None
+    if pending["action"] == "tier_confirmation":
+        question = native_question(pending["input"])
         answers = response.get("answers")
-        accepted = isinstance(answers, dict) and len(questions) == 1 and answers.get(questions[0].get("question")) == "确认"
+        key = question.get("id" if host == "codex" else "question")
+        answer = answers.get(key) if isinstance(answers, dict) and len(answers) == 1 and isinstance(key, str) else None
+        if host == "codex":
+            values = answer.get("answers") if isinstance(answer, dict) else None
+            answer = values[0] if isinstance(values, list) and len(values) == 1 else None
+        if isinstance(answer, str) and offered_tiers(question) and not question.get("multiSelect"):
+            tier = TIER_LABELS.get(answer)
+        accepted = tier is not None or (host == "claude" and answer == "确认" and not offered_tiers(question))
     else:
         accepted = response.get("approved") is True
     task = load_task(root)
-    if (not accepted or binding_error(event, task) or task["id"] != pending["task"] or task["current_round"] != pending["round"] or task["control_digest"] != pending["digest"] or task["version"] != pending["version"]):
+    if not accepted or not matches_confirmation(event, task, pending):
         return "ENGINE_CONFIRMATION_REJECTED：回执未确认或任务/轮次/版本已经变化；" + CONFIRM_HELP
-    from workflow_engine.engine import Engine
-    from workflow_engine_cli import default_db
-    engine = Engine(root, default_db(root))
-    if pending["action"] == "approval":
-        engine.approve_proposal(task["id"], task["version"], str(uuid.uuid4()), "Claude 原生用户流程", task["control_digest"])
-    else:
-        engine.confirm_tier(task["id"], task["version"], str(uuid.uuid4()), "Claude 原生用户流程")
-    path.unlink()
+    from workflow_engine.model import EngineError
+    try:
+        record_confirmation(root, pending, host + " 原生用户流程", tier)
+    except EngineError as error:
+        return "ENGINE_CONFIRMATION_REJECTED：" + str(error)
     return "ENGINE_CONFIRMATION_RECORDED：当前任务轮次用户流程确认已登记（非可信签署）。"
 
 
@@ -349,7 +523,7 @@ def pre_tool(event):
     if root is None:
         return None
     tool = event.get("tool_name")
-    if tool in {"AskUserQuestion", "ExitPlanMode"}:
+    if tool in {"AskUserQuestion", "ExitPlanMode"} or (tool == "request_user_input" and os.environ.get("WORKFLOW_HOST") == "codex"):
         return prepare_confirmation(event, root)
     if tool in READ_TOOLS or tool in set(filter(None, os.environ.get("WORKFLOW_READONLY_MCP_TOOLS", "").split(","))):
         return None
@@ -359,10 +533,18 @@ def pre_tool(event):
     try:
         paths = targets(event, root)
         # 规划例外只覆盖原生编辑；Shell 与 MCP 不能借用规划登记写文件。
-        from workflow_planning_cli import allows
-        if tool in {"Write", "Edit", "apply_patch"} and allows(root, event.get("session_id"), paths):
+        from workflow_planning_cli import allows, read_record
+        session = event.get("session_id")
+        if tool in PLANNING_EDIT_TOOLS and allows(root, session, paths):
             return None
-        task = load_task(root)
+        try:
+            task = load_task(root)
+        except ValueError as exc:
+            if not str(exc).startswith("ENGINE_TASK_UNBOUND：") or not session or not read_record(root, session):
+                raise
+            if tool in PLANNING_EDIT_TOOLS:
+                return "ENGINE_PLANNING_TARGET_DENIED：原生编辑的所有目标须在当前规划登记清单内。"
+            return "ENGINE_PLANNING_TOOL_UNSUPPORTED：规划登记仅支持原生文档编辑，当前工具不能使用此登记。"
         error = binding_error(event, task)
         if error:
             return error
@@ -373,7 +555,10 @@ def pre_tool(event):
         # status 的 missing 还含验证/评审终态缺项，实施阶段不能据此拒绝合法编码。
         readiness_missing = [item for item in task.get("missing", []) if item not in {"review", "checks"}]
         if readiness_missing:
-            return "ENGINE_NOT_READY：" + ", ".join(readiness_missing)
+            message = "ENGINE_NOT_READY：" + ", ".join(readiness_missing)
+            if os.environ.get("WORKFLOW_HOST") == "cursor" and "baseline" in readiness_missing:
+                message += "。请使用 CLI read-baseline 登记当前实施轮次的基线。"
+            return message
         if task.get("state") != "implementing":
             return "ENGINE_STATE_DENIED：仅 implementing 允许实施写入；评审后请新轮次，失败/失效请 CLI repair。"
         if paths and any(not any(p == scope or p.startswith(scope.rstrip("/") + "/") or scope == "." for scope in task.get("scope", [])) for p in paths):
@@ -388,10 +573,10 @@ def post_tool(event):
     CURRENT_EVENT.set(event)
     if os.environ.get("WORKFLOW_HOST") == "cursor":
         if event.get("tool_name") in {"Read", "ReadFile"}:
-            return "ENGINE_BASELINE_UNREAD：Cursor Read 回执 schema 未验证，请使用 CLI read-baseline。"
+            return None
         if event.get("tool_name") in {"AskQuestion", "AskUserQuestion", "ExitPlanMode"}:
             return CONFIRM_HELP if "workflow-confirm:" in confirmation_markers(event)[0] else None
-    if event.get("tool_name") in {"AskUserQuestion", "ExitPlanMode"}:
+    if event.get("tool_name") in {"AskUserQuestion", "ExitPlanMode"} or native_confirmation_host(event) == "codex":
         return complete_confirmation(event)
     if event.get("tool_name") not in {"Read", "ReadFile"}:
         return None
@@ -434,8 +619,11 @@ def post_tool(event):
 def context(event):
     """阶段边界汇总权威缺项，评审通过不等于人工验收。"""
     CURRENT_EVENT.set(event)
-    if project_root(event.get("cwd")) is None:
+    root = project_root(event.get("cwd"))
+    if root is None:
         return None
+    if event.get("hook_event_name") == "UserPromptSubmit":
+        return chat_confirmation(event, root)
     if event.get("hook_event_name") == "PostToolUse":
         return post_tool(event)
     try:

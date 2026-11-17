@@ -14,7 +14,7 @@ def codex():
 
 
 def emit_context(name, message):
-    if codex():
+    if codex() and name != "UserPromptSubmit":
         value = {"systemMessage": message}
     else:
         value = {"hookSpecificOutput": {"hookEventName": name, "additionalContext": message}}
@@ -42,7 +42,7 @@ def handle(event, root=None):
         return
     if project_root(event.get("cwd")) is None:
         return
-    if event.get("hook_event_name") in {"SessionStart", "Stop", "PostToolUse"}:
+    if event.get("hook_event_name") in {"SessionStart", "Stop", "PostToolUse", "UserPromptSubmit"}:
         message = context(event)
         if message:
             emit_context(event["hook_event_name"], message)

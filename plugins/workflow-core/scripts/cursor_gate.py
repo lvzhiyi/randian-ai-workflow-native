@@ -4,11 +4,16 @@ import os
 from pathlib import Path
 import re
 import sys
-import time
 
 import host_gate
 
-EVENTS = {"sessionStart": "SessionStart", "preToolUse": "PreToolUse", "postToolUse": "PostToolUse", "postToolUseFailure": "PostToolUseFailure", "stop": "Stop", "subagentStart": "SubagentStart", "subagentStop": "SubagentStop", "sessionEnd": "SessionEnd"}
+EVENTS = {
+    "sessionStart": "SessionStart",
+    "preToolUse": "PreToolUse",
+    "postToolUse": "PostToolUse",
+    "beforeSubmitPrompt": "UserPromptSubmit",
+    "subagentStart": "SubagentStart",
+}
 MAX_INPUT = 2 * 1024 * 1024
 
 
@@ -49,7 +54,7 @@ def choose_root(payload):
 
 
 def normalize(payload):
-    """保留工具输入字段；Cursor 输出字符串只用于观测，不转换成 Claude 回执。"""
+    """保留工具输入字段；保留 Cursor 工具输出的字符串格式。"""
     if not isinstance(payload, dict):
         raise ValueError("事件必须是对象")
     name = payload.get("hook_event_name")
@@ -61,17 +66,17 @@ def normalize(payload):
     data = payload.get("tool_input", {})
     if not isinstance(data, dict):
         raise ValueError("tool_input 必须是对象")
-    if name in {"preToolUse", "postToolUse", "postToolUseFailure"} and not isinstance(payload.get("tool_name"), str):
+    if name in {"preToolUse", "postToolUse"} and not isinstance(payload.get("tool_name"), str):
         raise ValueError("缺少 tool_name")
     root = choose_root(payload)
     event = {"cwd": str(root), "session_id": session, "hook_event_name": EVENTS[name], "tool_name": payload.get("tool_name", ""), "tool_input": data}
+    if name == "beforeSubmitPrompt":
+        event["prompt"] = payload.get("prompt")
     for key in ("tool_use_id", "generation_id"):
         if key in payload:
             if not isinstance(payload[key], str) or len(payload[key]) > 160:
                 raise ValueError(key + " 无效")
             event[key] = payload[key]
-    if "error_message" in payload:
-        event["error"] = payload["error_message"]
     if "tool_output" in payload:
         if not isinstance(payload["tool_output"], str):
             raise ValueError("tool_output 必须是 JSON 序列化字符串")
@@ -79,29 +84,17 @@ def normalize(payload):
     return event
 
 
-def trace(event):
-    """仅采集已接入项目；观测故障不取代授权结果，不计算源码哈希。"""
-    root = host_gate.project_root(event["cwd"])
-    if root is None:
-        return
-    event = dict(event, cwd=str(root))
-    from trace_hook import append_event, build_event, trace_dir
-    try:
-        record = build_event(event, time.time())
-        record.update(cwd=event["cwd"], session_id=event["session_id"])
-        append_event(trace_dir(), record)
-    except Exception:
-        pass
-
-
 def handle(payload):
     os.environ["WORKFLOW_HOST"] = "cursor"
     event = normalize(payload)
     name, tool = event["hook_event_name"], event["tool_name"]
-    # 初始化前不拦工具也不采集；解析故障仍由入口拒绝，不能降级为旁路。
+    # 初始化前不拦工具；解析故障仍由入口拒绝，不能降级为旁路。
     if host_gate.project_root(event["cwd"]) is None:
         return {"permission": "allow"} if name in {"PreToolUse", "SubagentStart"} else {}
-    trace(event)
+    if name == "UserPromptSubmit":
+        # 回复照常进入会话，由 Agent 读 status 并在版本失效时重新展示选项。
+        host_gate.context(event)
+        return {"continue": True}
     if name == "PreToolUse":
         if tool in {"Write", "Delete", "Edit"}:
             values = [event["tool_input"][key] for key in ("file_path", "path", "target_file") if key in event["tool_input"]]
@@ -120,17 +113,17 @@ def handle(payload):
                 result["updated_input"] = updated
         return result
     if name == "SessionStart":
-        return {"env": {"WORKFLOW_HOST": "cursor"}, "additional_context": bounded(host_gate.context(event) or host_gate.CONFIRM_HELP)}
+        workflow_context = host_gate.context(event) or host_gate.CONFIRM_HELP
+        context = (
+            f"Cursor conversation_id: {event['session_id']}\n"
+            f"文档规划登记命令的 --session 使用上述会话 ID。\n{workflow_context}"
+        )
+        return {"env": {"WORKFLOW_HOST": "cursor"}, "additional_context": bounded(context)}
     if name == "PostToolUse":
-        if tool == "AskQuestion":
-            message = host_gate.CONFIRM_HELP
-        else:
-            message = host_gate.context(event)
+        message = host_gate.context(event)
         return {"additional_context": bounded(message)} if message else {}
     if name == "SubagentStart":
         return {"permission": "allow", "user_message": "子 Agent 不继承独立写入授权；需以其真实 conversation_id 绑定当前轮次并 CLI read-baseline。父 Task 放行不代表子工具路径全部覆盖。"}
-    # stop 不返回 blocking/followup，避免自动追问循环；失败和结束仅留下轨迹。
-    return {}
 
 
 def bounded(message):

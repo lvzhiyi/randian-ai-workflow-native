@@ -1,6 +1,13 @@
 {
   "version": 1,
   "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
+        "failClosed": false,
+        "timeout": 10
+      }
+    ],
     "sessionStart": [
       {
         "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
@@ -22,35 +29,7 @@
         "timeout": 30
       }
     ],
-    "postToolUseFailure": [
-      {
-        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
-        "failClosed": true,
-        "timeout": 30
-      }
-    ],
-    "stop": [
-      {
-        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
-        "failClosed": true,
-        "timeout": 30
-      }
-    ],
     "subagentStart": [
-      {
-        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
-        "failClosed": true,
-        "timeout": 30
-      }
-    ],
-    "subagentStop": [
-      {
-        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
-        "failClosed": true,
-        "timeout": 30
-      }
-    ],
-    "sessionEnd": [
       {
         "command": "python3 \"${CURSOR_PLUGIN_ROOT}/scripts/cursor_gate.py\"",
         "failClosed": true,

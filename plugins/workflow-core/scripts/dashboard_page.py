@@ -22,7 +22,7 @@ def page_html() -> str:
 <div id="connection" class="notice" role="status" aria-live="polite">正在读取看板…</div>
 <section class="statusbar" aria-label="任务与引擎状态"><div><span class="muted">任务概览</span><strong id="task-summary">未知</strong><span class="muted">任务卡状态不等同于验证通过</span></div><div><span class="muted">执行模式</span><strong id="engine-mode">未知</strong><span id="engine-binding" class="muted">绑定：未知</span></div><div><span class="muted">引擎状态</span><strong id="engine-state">未知</strong><span id="engine-available" class="muted">可用性：未知</span></div></section>
 <div id="warning" class="notice" hidden></div>
-<div class="grid"><div><section class="panel"><h2>任务卡</h2><div class="searchbar" role="search" aria-label="任务筛选：搜索、状态与档位"><div class="search-input"><label class="muted" for="task-filter">搜索任务</label><input id="task-filter" type="search" placeholder="搜索编号或标题" autocomplete="off"></div><button id="clear-filter" type="button">清空筛选</button><div><label class="muted" for="state-filter">状态</label><select id="state-filter"><option value="all">全部状态</option></select></div><div><label class="muted" for="tier-filter">档位</label><select id="tier-filter"><option value="all">全部档位</option><option value="light">轻量</option><option value="standard">标准</option><option value="full">完整</option><option value="unknown">未知</option></select></div><p id="filter-count" class="muted" role="status" aria-live="polite"></p></div><div id="tasks" class="cards"></div></section><section class="panel"><h2>执行观测 · Trace</h2><p class="legend">绑定事件只作观测；未归属事件不改变任务状态。严格限定当前项目，不推测其他项目归属。</p><div id="trace"></div></section></div><aside><section class="panel"><h2>文档来源</h2><div id="documents"></div><p class="legend">只读纯文本预览，不执行 Markdown 或 HTML。</p></section><section class="panel"><h2>读取问题</h2><ul id="issues" class="issues"></ul></section><p class="muted">首版仅展示当前服务绑定的一个项目。此页面不批准、不修改状态，也不提供工具拦截或安全沙箱。</p></aside></div>
+<div class="grid"><div><section class="panel"><h2>任务卡</h2><div class="searchbar" role="search" aria-label="任务筛选：搜索、状态与档位"><div class="search-input"><label class="muted" for="task-filter">搜索任务</label><input id="task-filter" type="search" placeholder="搜索编号或标题" autocomplete="off"></div><button id="clear-filter" type="button">清空筛选</button><div><label class="muted" for="state-filter">状态</label><select id="state-filter"><option value="all">全部状态</option></select></div><div><label class="muted" for="tier-filter">档位</label><select id="tier-filter"><option value="all">全部档位</option><option value="light">轻量</option><option value="standard">标准</option><option value="full">完整</option><option value="unknown">未知</option></select></div><p id="filter-count" class="muted" role="status" aria-live="polite"></p></div><div id="tasks" class="cards"></div></section></div><aside><section class="panel"><h2>文档来源</h2><div id="documents"></div><p class="legend">只读纯文本预览，不执行 Markdown 或 HTML。</p></section><section class="panel"><h2>读取问题</h2><ul id="issues" class="issues"></ul></section><p class="muted">首版仅展示当前服务绑定的一个项目。此页面不批准、不修改状态，也不提供工具拦截或安全沙箱。</p></aside></div>
 </main>
 <aside id="drawer" class="drawer" aria-label="文档纯文本预览" hidden><div class="drawer-header"><h2 id="document-title">文档</h2><button id="close-document" type="button">关闭预览</button></div><p id="document-status" class="drawer-status" role="status"></p><pre id="document-content" tabindex="0"></pre></aside>
 <script>
@@ -153,13 +153,6 @@ function renderTasks(values) {
     node.append(details);return node;
   }) : [element('p',taskValues.length ? '没有匹配任务，试试清空筛选或调整状态和档位；不代表任务已完成。' : '暂无任务记录；等待任务登记，不代表已完成。','empty')]));
 }
-function renderTrace(value) {
-  const trace = value || {};
-  const node = byId('trace');
-  const events = list(trace.events).slice().sort((a,b) => text(a.ts,'').localeCompare(text(b.ts,'')));
-  const details = element('details',undefined,'technical');details.append(element('summary','展开观测技术详情 · 绑定事件 ' + events.length + ' / 未归属 ' + list(trace.unassigned).length),detailBlock('当前绑定事件时间线',events),detailBlock('未归属事件（绑定缺失或不匹配）',list(trace.unassigned)));node.replaceChildren(details);
-  if (trace.limited) node.append(element('p','读取达到限额，仅显示部分观测；不代表完整执行历史。','muted'));
-}
 function renderDocuments(values) {
   const items = list(values);
   byId('documents').replaceChildren(...(items.length ? items.map(item => {
@@ -185,7 +178,7 @@ function render(data) {
   if (mode.available !== true) warnings.push('未确认任务数据源可用。页面保留文档信息，不将其视为引擎批准或验证结果。');
   byId('warning').textContent = warnings.join('\n');
   byId('warning').hidden = !warnings.length;
-  renderTasks(data.tasks);renderTrace(data.trace);renderDocuments(data.documents);
+  renderTasks(data.tasks);renderDocuments(data.documents);
   const issues = list(data.issues);
   byId('issues').replaceChildren(...(issues.length ? issues.map(issue => element('li',issue)) : [element('li','暂无读取问题')]));
 }

@@ -41,7 +41,7 @@ class DashboardDataTest(unittest.TestCase):
 
     def test_missing_configuration_and_documents_are_unknown(self):
         data = self.build()
-        self.assertEqual(set(data), {"project", "mode", "stages", "tasks", "pending", "documents", "issues", "trace"})
+        self.assertEqual(set(data), {"project", "mode", "stages", "tasks", "pending", "documents", "issues"})
         self.assertEqual([s["id"] for s in data["stages"]], ["prd", "breakdown", "kickoff", "proposal", "implementation", "verification", "review", "delivery"])
         self.assertTrue(all(s["state"] == "unknown" for s in data["stages"]))
         self.assertFalse(self.db.exists())
@@ -250,38 +250,6 @@ class DashboardDataTest(unittest.TestCase):
             data = self.build()
         self.assertEqual(data["tasks"], [])
         self.assertTrue(data["issues"])
-
-    def test_trace_requires_project_task_round_and_session(self):
-        self.config(True)
-        self.database([{"id": "A", "protocol_version": 2, "root": str(self.root),
-            "current_round": "r", "rounds": [{"id": "r", "state": "implementing", "session_id": "s"}]}])
-        trace = Path(self.temp.name).resolve() / "trace"
-        (trace / "events").mkdir(parents=True)
-        event = {"cwd": str(self.root), "task_id": "A", "round_id": "r", "session_id": "s", "event": "PreToolUse", "ts": "2026-11-15T10:00:00Z"}
-        events = [event, dict(event, cwd="/other"), dict(event, task_id="B"),
-                  dict(event, round_id="old"), dict(event, session_id="other"),
-                  {"event": "PreToolUse"}, {"cwd": str(self.root), "event": "PreToolUse"}]
-        (trace / "events" / "s.jsonl").write_text("\n".join(json.dumps(e) for e in events))
-        with patch.dict(os.environ, {"WORKFLOW_TRACE_DIR": str(trace)}):
-            data = self.build("A")["trace"]
-        self.assertEqual(len(data["events"]), 1)
-        self.assertEqual(len(data["unassigned"]), 3)
-        self.assertTrue(all(e.get("task_id") != "B" for e in data["unassigned"]))
-
-    def test_trace_events_are_bounded_and_symlinks_rejected(self):
-        trace = Path(self.temp.name).resolve() / "trace"
-        (trace / "events").mkdir(parents=True)
-        event = json.dumps({"cwd": str(self.root), "event": "PreToolUse"}) + "\n"
-        (trace / "events" / "s.jsonl").write_text(event * 250)
-        with patch.dict(os.environ, {"WORKFLOW_TRACE_DIR": str(trace)}):
-            data = self.build()["trace"]
-            self.assertEqual(len(data["unassigned"]), 200)
-            self.assertTrue(data["limited"])
-            (trace / "events" / "s.jsonl").unlink()
-            outside = Path(self.temp.name).resolve() / "outside.jsonl"
-            outside.write_text(event)
-            (trace / "events" / "link.jsonl").symlink_to(outside)
-            self.assertEqual(self.build()["trace"]["unassigned"], [])
 
     def test_document_security(self):
         self.write("docs/good.md", "# 正文")

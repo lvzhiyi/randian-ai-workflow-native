@@ -11,7 +11,7 @@ description: 任务级工作流总入口。开发、文档、Bug、重构或续�
 
 Cursor 使用 `${CURSOR_PLUGIN_ROOT}` 定位插件；执行本插件引擎 CLI 前每次显式添加 `WORKFLOW_HOST=cursor`，使用插件脚本绝对路径和项目 `--root`。不要依赖 hook 子进程为后续 Shell 设置环境。数据库沿用共享默认位置，不承诺宿主隔离。Cursor conversation_id 对应 bind-executor 的 session；多根由 CURSOR_PROJECT_DIR 或 Shell working_directory 明确选择。
 
-Cursor AskQuestion 不能作为批准回执；人工在交互终端运行 confirm-tier，完整档另运行 approve-proposal（当前 control_digest）。Read 输出不能自动登记基线，必须 CLI read-baseline。Task 放行只验证父任务，子 Agent 的工具回调和会话绑定须独立核实，不承诺全写路径覆盖。看板 CLI 同样加 `WORKFLOW_HOST=cursor`，轨迹读取 `~/.cursor/workflow-trace`。详情见仓库 `docs/development/cursor-adapter.md`；当前未做真实 Cursor E2E。
+Cursor 在 Agent 聊天里收集档位和方案批准，见下方「在 Agent 窗口定档」。Read 输出不能自动登记基线，必须 CLI read-baseline。Task 放行只验证父任务，子 Agent 的工具回调和会话绑定须独立核实，不承诺全写路径覆盖。看板 CLI 同样加 `WORKFLOW_HOST=cursor`。详情见仓库 `docs/development/cursor-adapter.md`。
 
 ## 规则与输入
 
@@ -28,7 +28,7 @@ Cursor AskQuestion 不能作为批准回执；人工在交互终端运行 confir
 5. **Agent 双轴评审**（`review`）：三档均做 Spec + Standards；规定验证全部通过、证据有效且两轴通过，才达到 `review_passed`（评审通过）。
 6. **Agent 总结与人工交接**（`deliver`）：汇报真实状态和证据，人工验收/交付另行记录，不自动宣称产品完成。
 
-`handoff` 随时保存与恢复；`dashboard` 是任务级只读观测与 Trace 整合入口；旧 `trace` 技能仅提示迁移。只做整理的授权到整理结束，不自行转入产品实施。
+`handoff` 随时保存与恢复；`dashboard` 提供任务级只读查询。只做整理的授权到整理结束，不自行转入产品实施。
 
 ## 规划与实施分界
 
@@ -46,7 +46,22 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根
 
 继续与总结前读 `status`，必要时读 `snapshot` / `history`。修改使用最新整数 `version` 和唯一 `request`，绑定任务、当前轮次、尝试和证据；不编造通过命令、不手改数据库绕门禁。每轮明确主执行者，获授权的协作者继承同轮授权并以版本检查更新。脚本缺失、协议不兼容或宿主能力不足须报告，不能静默降级。宿主根据当前 session 的唯一轮次绑定查找任务，不要求在子 shell 中 export 后修改父进程环境。多任务冲突时显式指定任务并重新绑定；不得猜测当前任务。首次创建可用 `--plan-json` / `--details-json`，报告和修复输入可用 `--file-json`，无需实施前先写 JSON 文件。
 
-Claude 的确认请求必须包含 `workflow-confirm:<任务ID>:<轮次ID>:<control_digest>:tier_confirmation`，使用单个 `AskUserQuestion` 问题，用户回答“确认”才登记档位。完整档先按 `tiering` 展示提案、技术设计和实施步骤，再用 `ExitPlanMode`，请求包含同格式的 `:approval` 标记，成功批准回调才登记。标记使用当前查询值，任务版本变化后重新请求；不把普通问答当批准。Codex 暂无已验证的原生确认 schema，要求用户在交互终端运行 `confirm-tier` / `approve-proposal`，不让 Agent 代填。两端目前只有模拟回调及真实 CLI 集成测试，不等于双宿主端到端已验证。
+### 在 Agent 窗口定档
+
+先绑定会话并读取 `status`。只有当前轮次缺少 `tier_confirmation` 才邀请用户定档。向用户展示当前任务、实施范围、推荐档位及三个档位的影响。选项标签固定为 `轻量档`、`标准档`、`完整档`，在问题正文或选项说明里标出推荐，保留标签原文。用户选中一项即完成定档。
+
+- Claude Code 优先用 `AskUserQuestion` 的单个 `multiSelect: false` 问题。Codex 在当前会话实际提供 `request_user_input` 时，用其单个带 `id` 的问题。两端的问题正文均包含当前 `workflow-confirm:<任务ID>:<轮次ID>:<control_digest>:tier_confirmation`，标记前后用空白隔开。使用真实工具 schema，并从 `status` 核实回执已入账。
+- Cursor 使用聊天回复。Claude Code 或 Codex 缺少原生工具、钩子未收到匹配回执时，也用聊天回复。Agent 先运行下面的命令登记当前版本，再在同一会话展示三个选项，引导用户单独回复 `选轻量档`、`选标准档` 或 `选完整档`。用户直接发消息即可，命令由 Agent 执行。
+
+```bash
+WORKFLOW_HOST=codex python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" \
+  --root "项目根" request-confirmation --task "任务ID" --version "当前版本" \
+  --session "当前绑定会话" --request "唯一请求ID" --kind tier_confirmation
+```
+
+示例使用 Codex。在 Cursor 或 Claude Code 中用 `WORKFLOW_HOST=cursor` 或 `WORKFLOW_HOST=claude`，脚本路径使用实际插件根。CLI 仅准备请求，确认由宿主收到用户消息后记录。回复后重新读 `status`。任务版本、轮次或绑定发生变化时，重新登记并展示确认选项。若选中的档位需要补齐步骤、方案或验证计划，先补齐缺项。
+
+完整档按 `tiering` 在会话中展示提案、技术设计和实施步骤，再单独批准。Claude Code 可用 `ExitPlanMode`，在计划包含同格式的 `:approval` 标记。任一宿主也可使用上面的命令，改为 `--kind approval` 并引导用户单独回复 `批准方案`。准备批准前使用最新版本，登记成功后以 `status` 为准。终端 `confirm-tier` 和 `approve-proposal` 保留给显式选择 CLI 的用户。
 
 人工确认仅为流程证据，不是可信签署；TTY、actor 或模型自报不提供抗程序代答、同账号防篡改或完整写入路径覆盖。插件不是安全沙箱。
 

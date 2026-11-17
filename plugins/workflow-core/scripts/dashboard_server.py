@@ -15,7 +15,7 @@ from urllib.request import urlopen
 
 from dashboard_data import build_dashboard, read_document
 from dashboard_page import page_html
-from trace_hook import workflow_home
+from workflow_host import workflow_home
 
 APP = "workflow-dashboard"
 

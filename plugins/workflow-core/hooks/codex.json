@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
+            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/workflow_gate.py\"",
             "timeout": 10
           }
         ]
@@ -32,27 +32,9 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
-            "timeout": 10
-          }
-        ]
       }
     ],
     "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
-            "timeout": 10
-          }
-        ]
-      },
       {
         "hooks": [
           {
@@ -68,28 +50,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/workflow_gate.py\"",
             "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Interrupt": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "WORKFLOW_HOST=codex python3 \"${PLUGIN_ROOT}/scripts/trace_hook.py\"",
-            "timeout": 3
           }
         ]
       }

@@ -7,35 +7,7 @@
           {
             "type": "command",
             "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
-            ],
-            "async": true
-          }
-        ]
-      }
-    ],
-    "UserPromptExpansion": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
-            ],
-            "async": true
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_gate.py"
-            ],
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/workflow_gate.py"],
             "timeout": 10
           }
         ]
@@ -53,33 +25,9 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
-            ],
-            "async": true
-          }
-        ]
       }
     ],
     "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
-            ],
-            "async": true
-          }
-        ]
-      },
       {
         "hooks": [
           {
@@ -93,33 +41,7 @@
         ]
       }
     ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
-            ],
-            "async": true
-          }
-        ]
-      }
-    ],
     "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/trace_hook.py"
-            ],
-            "async": true
-          }
-        ]
-      },
       {
         "hooks": [
           {

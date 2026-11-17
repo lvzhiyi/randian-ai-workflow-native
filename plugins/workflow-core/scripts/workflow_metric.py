@@ -13,12 +13,16 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent))
-from trace_hook import is_codex, redact, workflow_home  # noqa: E402
+from workflow_host import is_codex, workflow_home  # noqa: E402
+
+SECRET = re.compile(r'(?i)(bearer\s+|(?:token|password|passwd|secret|api[_-]?key)["\']?\s*[=:]\s*["\']?)'
+                    r'[^\s"\'&]+|\bsk-[A-Za-z0-9_-]{12,}')
 
 TIERS = ('轻量', '标准', '完整')
 AXES = ('spec', 'standards')
@@ -38,6 +42,11 @@ class RecordError(Exception):
 def metrics_dir():
     """返回度量数据目录。"""
     return Path(os.environ.get('WORKFLOW_METRICS_DIR') or workflow_home() / 'workflow-metrics')
+
+
+def redact(text):
+    """遮盖文本中疑似令牌、密码的值。"""
+    return SECRET.sub(lambda m: (m.group(1) or '') + '***', text)
 
 
 def text(value, name):

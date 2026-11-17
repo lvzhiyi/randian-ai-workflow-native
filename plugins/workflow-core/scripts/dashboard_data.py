@@ -16,7 +16,7 @@ from typing import Optional
 import workflow_config
 import workflow_engine_cli
 from workflow_engine import snapshot
-from dashboard_projection import project_task, read_trace
+from dashboard_projection import project_task
 
 MAX_CONFIG_BYTES = 64 * 1024
 MAX_DOCUMENT_BYTES = 512 * 1024
@@ -346,5 +346,4 @@ def build_dashboard(root: Path, task_id: Optional[str] = None) -> dict:
     result["tasks"] = [task_map[key] for key in sorted(task_map)]
     if task_id is not None:
         result["tasks"] = [item for item in result["tasks"] if item["id"] == task_id]
-    result["trace"] = read_trace(root, result["tasks"], task_id, _open_directory)
     return result

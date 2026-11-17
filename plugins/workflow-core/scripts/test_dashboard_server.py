@@ -23,7 +23,9 @@ class ServerTests(unittest.TestCase):
 
     def test_dashboard_and_foreign_host(self):
         with urlopen(self.url + "/api/dashboard") as response:
-            self.assertIn("mode", json.load(response))
+            data = json.load(response)
+            self.assertIn("mode", data)
+            self.assertNotIn("trace", data)
         with self.assertRaises(HTTPError) as caught:
             urlopen(Request(self.url + "/api/dashboard", headers={"Host": "evil.test"}))
         self.assertEqual(caught.exception.code, 403)
@@ -36,12 +38,13 @@ class ServerTests(unittest.TestCase):
             urlopen(Request(self.url + "/api/dashboard", data=b"{}", method="POST"))
         self.assertEqual(caught.exception.code, 405)
 
-    def test_task_first_page_and_read_only_execution_observation(self):
+    def test_task_first_page(self):
         with urlopen(self.url + "/") as response:
             page = response.read().decode("utf-8")
         self.assertNotIn("流程 · 8 步", page)
         self.assertNotIn("阻塞与待确认</h2>", page)
-        for label in ("执行观测", "任务筛选", "双轴评审", "活动未知", "待人工验收"):
+        self.assertNotIn("执行观测", page)
+        for label in ("任务筛选", "双轴评审", "活动未知", "待人工验收"):
             self.assertIn(label, page)
         self.assertNotIn("旧配置 / 数据源未启用", page)
         self.assertNotIn("mode.configured_enabled", page)

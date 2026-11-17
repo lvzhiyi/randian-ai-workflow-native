@@ -19,7 +19,8 @@ class HostGateTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         (self.root / "ai-workflow.yaml").write_text("version: 1\nengine:\n  enabled: false\n", encoding="utf-8")
-        self.env = patch.dict(os.environ, {"WORKFLOW_TASK_ID": "T1", "WORKFLOW_ROUND_ID": "r1", "WORKFLOW_EXECUTOR": "agent"})
+        # 本组验证 Claude 回执契约，不能继承启动测试的 Cursor/Codex 宿主。
+        self.env = patch.dict(os.environ, {"WORKFLOW_HOST": "claude", "WORKFLOW_TASK_ID": "T1", "WORKFLOW_ROUND_ID": "r1", "WORKFLOW_EXECUTOR": "agent"})
         self.env.start()
         self.addCleanup(self.env.stop)
 
@@ -65,6 +66,20 @@ class HostGateTests(unittest.TestCase):
             self.assertFalse(host_gate.readonly_shell(command), command)
         for command in ("git status --short", "rg -n needle src", "pwd", "ls -la", "cat rules.md"):
             self.assertTrue(host_gate.readonly_shell(command), command)
+
+    def test_readonly_chains_preserve_quotes_and_reject_unknown_syntax(self):
+        for command in ("pwd && git remote -v", "git symbolic-ref --short refs/remotes/origin/HEAD", "rg 'a && b' src && git --no-pager diff", 'rg "a && b" src && pwd'):
+            self.assertTrue(host_gate.readonly_shell(command), command)
+        for command in ("pwd &&", "&& pwd", "pwd && && ls", "pwd & ls", "pwd || ls", "pwd; ls", "pwd | cat", "pwd && cat x > y", "pwd && $(touch x)", "pwd && `touch x`", "pwd && git remote remove origin", "pwd && git symbolic-ref --delete HEAD", "pwd && git symbolic-ref HEAD refs/heads/x", "pwd && git -c alias.x=x status", "pwd && python3 -c pass"):
+            self.assertFalse(host_gate.readonly_shell(command), command)
+        event = self.event("Shell", cmd=["bash", "-lc", "git diff && git --no-pager show HEAD"], timeout=9)
+        updated = host_gate.safe_shell_input(event)
+        self.assertEqual(updated["timeout"], 9)
+        self.assertEqual(updated["cmd"][:2], ["bash", "-lc"])
+        self.assertEqual(updated["cmd"][2].count("--no-ext-diff"), 2)
+        self.assertEqual(updated["cmd"][2].count("--no-textconv"), 2)
+        with patch.object(host_gate, "load_task", side_effect=AssertionError("只读组合不得读取任务全量快照")):
+            self.assertIsNone(host_gate.pre_tool(self.event("Shell", command="git status && git remote -v")))
 
     def test_scoped_baselines_cover_directory_and_real_target(self):
         (self.root / "ai-workflow.yaml").write_text("version: 1\nbaseline:\n  scoped:\n    - src/**/*.py => python.md\n    - other/** => other.md\n", encoding="utf-8")
@@ -158,7 +173,9 @@ class HostGateTests(unittest.TestCase):
             engine.return_value.confirm_tier.assert_not_called()
             self.assertIn("RECORDED", host_gate.post_tool(event))
             engine.return_value.confirm_tier.assert_called_once()
-            self.assertIn("UNSUPPORTED", host_gate.post_tool(event))
+            task["version"] += 1
+            self.assertIn("REJECTED", host_gate.post_tool(event))
+            engine.return_value.confirm_tier.assert_called_once()
             event = dict(event, tool_name="ExitPlanMode", tool_use_id="call2", tool_input={"plan": "workflow-confirm:T1:r1:digest:approval"}, tool_response={"approved": True})
             self.assertIsNone(host_gate.pre_tool(event))
             self.assertIn("RECORDED", host_gate.post_tool(event))

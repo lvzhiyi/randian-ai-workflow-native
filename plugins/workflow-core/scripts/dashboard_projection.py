@@ -1,8 +1,4 @@
 """看板专属只读投影：不实例化引擎，不核算文件哈希。"""
-import json
-import os
-import stat
-from pathlib import Path
 
 
 def records(value):
@@ -109,63 +105,3 @@ def project_task(task, previous):
             "required_findings": current.get("required_findings", []), "rounds": rounds,
             "proposal": task.get("proposal"), "plan": task.get("plan"), "acceptance": task.get("acceptance", []),
             "human_acceptance": task.get("human_acceptance"), "handoff": current.get("handoff", task.get("handoff"))}}
-
-
-def read_trace(root, tasks, task_id, open_directory):
-    """cwd 精确匹配项目；任务、轮次、会话缺一不归属，读取总量固定有界。"""
-    from trace_hook import trace_dir
-    output = {"events": [], "unassigned": [], "limited": False}
-    folder = Path(trace_dir()) / "events"
-    budget = 262144
-    mapping = {t["id"]: t for t in tasks if t.get("protocol_version") == 2}
-    try:
-        fd = open_directory(folder)
-        os.close(fd)
-        with os.scandir(folder) as entries:
-            for index, entry in enumerate(entries):
-                if index >= 32 or budget <= 0:
-                    output["limited"] = True
-                    break
-                if not entry.name.endswith(".jsonl") or not entry.is_file(follow_symlinks=False):
-                    continue
-                parent = open_directory(folder)
-                try:
-                    fd = os.open(entry.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
-                    try:
-                        if not stat.S_ISREG(os.fstat(fd).st_mode):
-                            continue
-                        with os.fdopen(fd, "rb", closefd=False) as stream:
-                            raw = stream.read(budget + 1)
-                        used = min(len(raw), budget)
-                        if len(raw) > budget:
-                            output["limited"] = True
-                            raw = raw[:budget]
-                            raw = raw.rsplit(b"\n", 1)[0] if b"\n" in raw else b""
-                        budget -= used
-                    finally:
-                        os.close(fd)
-                finally:
-                    os.close(parent)
-                for line in raw.splitlines():
-                    if len(output["events"]) + len(output["unassigned"]) >= 200:
-                        output["limited"] = True
-                        return output
-                    try:
-                        event = json.loads(line)
-                    except (ValueError, UnicodeError, RecursionError):
-                        continue
-                    if not isinstance(event, dict) or event.get("cwd") != str(root):
-                        continue
-                    identity = event.get("task_id")
-                    if identity is not None and not isinstance(identity, str):
-                        continue
-                    if task_id is not None and identity not in (None, task_id):
-                        continue
-                    task = mapping.get(identity)
-                    bound = bool(task and task.get("current_round") and task.get("session_id") and event.get("round_id") == task["current_round"] and event.get("session_id") == task["session_id"])
-                    summary = {k: event.get(k) for k in ("ts", "event", "tool_name", "task_id", "round_id", "session_id")}
-                    summary["binding"] = "bound" if bound else "unassigned"
-                    output["events" if bound else "unassigned"].append(summary)
-    except (OSError, ValueError):
-        pass
-    return output

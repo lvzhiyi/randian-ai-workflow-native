@@ -77,6 +77,26 @@ class TriggerTests(unittest.TestCase):
         self.assertEqual((stats['total'], stats['any'], stats['review'], stats['deliver'], stats['recorded']), (2, 1, 1, 0, 1))
 
 
+    def test_transcript_counts_skills_and_excludes_failed_edits(self):
+        path = self.transcript(
+            's1', ('apply_patch', {'command': '*** Update File: docs/readme.md\n*** Update File: app.py'}),
+            ('Read', {'file_path': '/workflow-core/skills/review/SKILL.md'}),
+        )
+        self.assertTrue(report.session_usage(path)['code_changed'])
+        with path.open('a', encoding='utf-8') as handle:
+            handle.write('\n' + json.dumps({
+                'type': 'user', 'message': {'content': [
+                    {'type': 'tool_result', 'tool_use_id': 's10', 'is_error': True},
+                ]},
+            }))
+            handle.write('\n' + json.dumps({
+                'type': 'user', 'message': {'content': '<command-name>/workflow-core:verify</command-name>'},
+            }))
+        self.assertEqual(report.session_usage(path), {
+            'id': 's1', 'code_changed': False, 'skills': {'review', 'verify'},
+        })
+
+
 class RenderTests(unittest.TestCase):
     def test_empty_data_renders_and_warns(self):
         text = report.render(args(), 'demo', [], [], [])

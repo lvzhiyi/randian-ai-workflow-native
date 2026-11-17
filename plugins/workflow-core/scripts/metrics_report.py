@@ -14,9 +14,8 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent))
-from trace_hook import is_codex  # noqa: E402
+from workflow_host import is_codex  # noqa: E402
 from workflow_metric import git_value, metrics_dir  # noqa: E402
-from workflow_trace import code_edit_steps, parse_session, read_jsonl  # noqa: E402
 
 DAY = 86400
 # 触发率低于该值时，“零命中”不足以说明规则没用。
@@ -26,6 +25,22 @@ MIN_HITS = 3
 # 这类规则频率低但后果重，不因零命中进入删除候选。
 PROTECTED = re.compile(r'安全|鉴权|权限|登录|凭据|密码|令牌|敏感|数据完整|迁移|支付|(?i:auth|token|secret|security)')
 PENDING_STATUS = '实施完成，待验证'
+EDIT_TOOLS = ('Edit', 'Write', 'NotebookEdit', 'MultiEdit')
+BASH_WRITE = re.compile(r"sed -i|write_text\(|open\([^)]*['\"]w['\"]|\bperl -pi\b|(?:^|\s)>>?\s*[\w./-]+\.\w+")
+CODE_PATH = re.compile(r'[\w./-]+\.(?:dart|py|tsx?|jsx?|vue|kt|swift|java|sh)\b')
+GENERATED = re.compile(r'\.(g|freezed|gr|config|mocks)\.dart$')
+COMMAND_TAG = re.compile(r'<command-name>/?([^<]+)</command-name>')
+PATCH_PATH = re.compile(r'^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$', re.M)
+
+
+def read_jsonl(path):
+    """逐行解析 jsonl，跳过损坏的行。"""
+    with open(path, encoding='utf-8') as handle:
+        for line in handle:
+            try:
+                yield json.loads(line)
+            except ValueError:
+                continue
 
 
 def load_records(root):
@@ -59,21 +74,73 @@ def session_cwd(path):
     return Path('.')
 
 
-def workflow_skill(step):
-    """返回步骤对应的 workflow-core 技能短名；不是则返回 None。"""
-    if step['kind'] != 'skill':
-        return None
-    if step['title'].startswith('workflow-core:'):
-        return step['title'].split(':', 1)[1]
-    return step['title'] if 'workflow-core' in step.get('detail', '') else None
+def workflow_skill(title, data):
+    if title.startswith('workflow-core:'):
+        return title.split(':', 1)[1]
+    return title if 'workflow-core' in json.dumps(data, ensure_ascii=False) else None
+
+
+def is_code(path):
+    """判断是否手写代码文件（排除文档、配置和生成文件）。"""
+    return not GENERATED.search(path) and Path(path).suffix in (
+        '.dart', '.py', '.ts', '.tsx', '.js', '.jsx', '.vue', '.kt', '.swift', '.java', '.sh')
+
+
+def tool_edits_code(name, data, cwd):
+    if name in EDIT_TOOLS:
+        return is_code(data.get('file_path') or data.get('notebook_path') or '?')
+    if name == 'apply_patch':
+        paths = data.get('patch_paths') or PATCH_PATH.findall(data.get('command', ''))
+        return any(is_code(path) for path in paths)
+    if name == 'Bash':
+        command = data.get('command', '')
+        return bool(BASH_WRITE.search(command)) and any(
+            is_code(path) and (cwd / path).is_file() for path in CODE_PATH.findall(command)
+        )
+    return False
 
 
 def session_usage(path):
-    """统计一个会话是否改了代码、用了哪些工作流技能。"""
-    session = parse_session(path, [], session_cwd(path))
-    steps = [step for turn in session['turns'] for step in turn['steps']]
-    return {'id': Path(path).stem, 'code_changed': bool(code_edit_steps(steps)),
-            'skills': {name for name in map(workflow_skill, steps) if name}}
+    """读取 Claude 会话，统计工作流技能和手写代码改动。"""
+    cwd = session_cwd(path)
+    skills, seen, edits, failed = set(), set(), set(), set()
+    for record in read_jsonl(path):
+        kind = record.get('type')
+        if kind not in ('user', 'assistant') or record.get('isSidechain'):
+            continue
+        content = (record.get('message') or {}).get('content')
+        blocks = [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+        if kind == 'user':
+            text = content if isinstance(content, str) else '\n'.join(
+                block.get('text', '') for block in blocks if block.get('type') == 'text'
+            )
+            command = COMMAND_TAG.search(text)
+            if command:
+                skills.add(workflow_skill(command.group(1), {}))
+            for block in blocks:
+                call = block.get('tool_use_id')
+                if block.get('type') == 'tool_result' and call in seen:
+                    if block.get('is_error'):
+                        failed.add(call)
+                    else:
+                        failed.discard(call)
+            continue
+
+        for block in blocks:
+            call = block.get('id')
+            if block.get('type') != 'tool_use' or call in seen:
+                continue
+            seen.add(call)
+            name, data = block['name'], block.get('input') or {}
+            if name == 'Skill':
+                skills.add(workflow_skill(data.get('skill', '?'), data))
+            elif name in ('Read', 'Grep', 'Glob', 'LS') and str(data.get('file_path', '')).endswith('SKILL.md'):
+                skills.add(workflow_skill(Path(data['file_path']).parent.name, data))
+            elif tool_edits_code(name, data, cwd):
+                edits.add(call)
+
+    skills.discard(None)
+    return {'id': Path(path).stem, 'code_changed': bool(edits - failed), 'skills': skills}
 
 
 def trigger_stats(usages, records):
