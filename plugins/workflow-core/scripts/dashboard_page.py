@@ -11,18 +11,73 @@ def page_html() -> str:
 <title>工作流看板</title>
 <style>
 :root{color-scheme:dark;--bg:#0c1019;--panel:#151c29;--line:#2a3549;--text:#e7edf8;--muted:#a0aec5;--accent:#91b5ff;--warn:#ffd18a;--bad:#ff9eaa;--good:#85ddba}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}button{font:inherit;background:#202e46;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 13px;cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button:disabled{cursor:wait;opacity:.6}h1,h2,h3,p{margin:0}h1{font-size:26px}h2{font-size:18px;margin-bottom:14px}h3{font-size:16px}.shell{max-width:1440px;margin:auto;padding:28px}.header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:20px}.eyebrow{font-size:12px;letter-spacing:.15em;color:var(--accent)}.muted,.source{color:var(--muted);font-size:13px;overflow-wrap:anywhere}.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.statusbar,.panel,.notice{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:20px}.statusbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-bottom:18px}.statusbar strong{display:block;font-size:18px;margin:3px 0}.notice{margin-bottom:18px;color:var(--warn);white-space:pre-wrap;overflow-wrap:anywhere}.notice.error{color:var(--bad);border-color:#74434c}.notice[hidden]{display:none}.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:18px}.panel{min-width:0;margin-bottom:18px}.stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.stage,.card{border:1px solid var(--line);border-radius:9px;padding:14px;min-width:0}.stage-index{color:var(--accent);font-size:12px}.stage h3{margin:5px 0}.badge{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted);overflow-wrap:anywhere;max-width:100%}.badge[data-tone=good]{color:var(--good);border-color:#33574d}.badge[data-tone=bad]{color:var(--bad);border-color:#74434c}.badge[data-tone=active]{color:var(--accent);border-color:#425d89}.cards{display:grid;gap:12px}.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}.card h3,.card dd{overflow-wrap:anywhere}.card dl{margin:12px 0 0;display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 10px}.card dt{color:var(--muted)}.card dd{margin:0;white-space:pre-wrap}.source{margin-top:10px}.empty{color:var(--muted);padding:12px 0}.document{width:100%;text-align:left;margin-bottom:9px;display:block;overflow-wrap:anywhere}.document small{display:block;color:var(--muted)}.legend{margin-top:14px;color:var(--muted);font-size:12px}.drawer{position:fixed;inset:0 0 0 auto;width:min(680px,100%);background:#111925;border-left:1px solid var(--line);box-shadow:-20px 0 70px #0008;padding:22px;z-index:2;display:flex;flex-direction:column}.drawer[hidden]{display:none}.drawer-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.drawer h2{overflow-wrap:anywhere}.drawer pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;flex:1;font:13px/1.75 ui-monospace,SFMono-Regular,monospace;border-top:1px solid var(--line);padding-top:18px}.drawer-status{color:var(--warn);white-space:pre-wrap}.issues{margin:0;padding-left:20px;color:var(--warn);overflow-wrap:anywhere}
-@media(max-width:1000px){.stages{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}}@media(max-width:600px){.shell{padding:16px}.header{flex-direction:column}.statusbar{grid-template-columns:1fr}.stages{grid-template-columns:1fr 1fr}.panel{padding:15px}.card-head{flex-direction:column}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}button{font:inherit;background:#202e46;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 13px;cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button:disabled{cursor:wait;opacity:.6}h1,h2,h3,p{margin:0}h1{font-size:26px}h2{font-size:18px;margin-bottom:14px}h3{font-size:16px}.shell{max-width:1440px;margin:auto;padding:28px}.header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:20px}.eyebrow{font-size:12px;letter-spacing:.15em;color:var(--accent)}.muted,.source{color:var(--muted);font-size:13px;overflow-wrap:anywhere}.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.statusbar,.panel,.notice{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:20px}.statusbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-bottom:18px}.statusbar strong{display:block;font-size:18px;margin:3px 0}.notice{margin-bottom:18px;color:var(--warn);white-space:pre-wrap;overflow-wrap:anywhere}.notice.error{color:var(--bad);border-color:#74434c}.notice[hidden]{display:none}.panel{min-width:0;margin-bottom:18px}.stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.stage,.card{border:1px solid var(--line);border-radius:9px;padding:14px;min-width:0}.stage-index{color:var(--accent);font-size:12px}.stage h3{margin:5px 0}.badge{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted);overflow-wrap:anywhere;max-width:100%}.badge[data-tone=good]{color:var(--good);border-color:#33574d}.badge[data-tone=bad]{color:var(--bad);border-color:#74434c}.badge[data-tone=active]{color:var(--accent);border-color:#425d89}.cards{display:grid;gap:12px}.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}.card h3,.card dd{overflow-wrap:anywhere}.card dl{margin:12px 0 0;display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 10px}.card dt{color:var(--muted)}.card dd{margin:0;white-space:pre-wrap}.source{margin-top:10px}.empty{color:var(--muted);padding:12px 0}.document{width:100%;text-align:left;margin-bottom:9px;display:block;overflow-wrap:anywhere}.document small{display:block;color:var(--muted)}.legend{margin-top:14px;color:var(--muted);font-size:12px}.drawer{position:fixed;inset:0 0 0 auto;width:min(680px,100%);background:#111925;border-left:1px solid var(--line);box-shadow:-20px 0 70px #0008;padding:22px;z-index:2;display:flex;flex-direction:column}.drawer[hidden]{display:none}.drawer-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.drawer h2{overflow-wrap:anywhere}.drawer pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;flex:1;font:13px/1.75 ui-monospace,SFMono-Regular,monospace;border-top:1px solid var(--line);padding-top:18px}.drawer-status{color:var(--warn);white-space:pre-wrap}.issues{margin:0;padding-left:20px;color:var(--warn);overflow-wrap:anywhere}
+@media(max-width:1000px){.stages{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.shell{padding:16px}.header{flex-direction:column}.statusbar{grid-template-columns:1fr}.stages{grid-template-columns:1fr 1fr}.panel{padding:15px}.card-head{flex-direction:column}}
 .searchbar{display:flex;align-items:end;flex-wrap:wrap;gap:12px;background:#101725;border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:18px}.searchbar label{display:block;margin-bottom:5px}.search-input{flex:1 1 210px}.searchbar input,.searchbar select{width:100%;font:inherit;color:var(--text);background:#0c1320;border:1px solid #3a4961;border-radius:8px;padding:9px 12px;min-height:43px}.searchbar input::placeholder{color:var(--muted)}.searchbar input:focus-visible,.searchbar select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.searchbar button{min-height:43px}.searchbar #filter-count{flex-basis:100%}.business-section{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.business-section h3{margin-bottom:7px}.business-section p{margin:5px 0}.technical{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}.technical summary,.business-section>summary,details.log summary{cursor:pointer;color:var(--accent)}pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}details.log{margin-top:7px}.empty{text-align:center;padding:28px 12px;border:1px dashed var(--line);border-radius:10px}@media(max-width:600px){.searchbar{align-items:stretch}.searchbar>div,.searchbar>button{flex:1 1 100%}}
+.shell{padding-top:20px}
+.header{margin-bottom:12px}
+.statusbar{padding:10px 16px;margin-bottom:12px;gap:12px}
+.statusbar strong{font-size:16px;margin:0;line-height:1.4}
+.dashboard-layout{position:relative;display:grid;grid-template-areas:"documents" "tasks";gap:12px;align-items:start;margin-bottom:18px}
+.dashboard-layout>.panel{margin:0}
+.task-panel{grid-area:tasks;padding-top:14px}
+.task-panel h2{margin-bottom:10px}
+#document-sources{grid-area:documents;padding:10px 16px}
+#document-sources summary{overflow-wrap:anywhere}
+#document-count{margin-inline-start:8px}
+#documents{margin-top:12px}
+@media(min-width:1001px){
+  .dashboard-layout:has(#document-sources[open]){grid-template-columns:minmax(0,1fr) minmax(260px,320px);grid-template-areas:"tasks documents"}
+  .dashboard-layout:has(#document-sources:not([open])){grid-template-areas:"tasks"}
+  #document-sources:not([open]){position:absolute;top:8px;right:20px;padding:4px 10px;grid-area:auto}
+  .dashboard-layout:has(#document-sources:not([open])) h2{padding-right:300px}
+  .task-panel .searchbar #filter-count{flex-basis:auto;align-self:center}
+}
+.task-panel .searchbar{padding:10px 12px;margin-bottom:12px;gap:6px 10px}
+.cards{gap:8px}
+.card{padding:8px 14px;line-height:1.4}
+.card-head{margin-bottom:3px}
+.card-head .badge{flex-shrink:0}
+.card>.muted{line-height:1.35}
+.task-focus{display:flex;gap:6px;align-items:baseline;margin-top:3px;overflow-wrap:anywhere}
+.task-focus strong,.task-focus .remaining{flex-shrink:0}
+.task-focus[data-tone=attention] strong{color:var(--warn)}
+.task-focus .message{min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.task-details{margin-top:3px}
+.task-details>summary{width:fit-content;font-size:13px}
+.task-context{margin-top:10px}
+summary{cursor:pointer;color:var(--accent)}
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:600px){
+  .statusbar{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .statusbar>div:first-child{grid-column:1/-1}
+  .task-panel .searchbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .searchbar .search-input{grid-column:1/-1}
+  .searchbar #filter-count{grid-column:1/-1}
+  #clear-filter{grid-column:1/-1;justify-self:start;min-height:0;padding:4px 10px}
+  .card-head{flex-direction:row;flex-wrap:wrap;gap:4px 10px}
+  .task-focus{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
 <main class="shell">
-<header class="header"><div><p class="eyebrow">WORKFLOW / READ ONLY</p><h1 id="project-name">工作流看板</h1><p id="project-root" class="muted">等待项目数据</p></div><div class="actions"><span id="updated" class="muted">每 2 秒刷新</span><button id="refresh" type="button">立即刷新</button></div></header>
+<header class="header"><div><h1 id="project-name">工作流看板</h1><p id="project-root" class="muted">等待项目数据</p></div><div class="actions"><span id="updated" class="muted">每 2 秒刷新</span><button id="refresh" type="button">立即刷新</button></div></header>
 <div id="connection" class="notice" role="status" aria-live="polite">正在读取看板…</div>
 <section class="statusbar" aria-label="任务与引擎状态"><div><span class="muted">任务概览</span><strong id="task-summary">未知</strong><span class="muted">任务卡状态不等同于验证通过</span></div><div><span class="muted">执行模式</span><strong id="engine-mode">未知</strong><span id="engine-binding" class="muted">绑定：未知</span></div><div><span class="muted">引擎状态</span><strong id="engine-state">未知</strong><span id="engine-available" class="muted">可用性：未知</span></div></section>
 <div id="warning" class="notice" hidden></div>
-<div class="grid"><div><section class="panel"><h2>任务卡</h2><div class="searchbar" role="search" aria-label="任务筛选：搜索、状态与档位"><div class="search-input"><label class="muted" for="task-filter">搜索任务</label><input id="task-filter" type="search" placeholder="搜索编号或标题" autocomplete="off"></div><button id="clear-filter" type="button">清空筛选</button><div><label class="muted" for="state-filter">状态</label><select id="state-filter"><option value="all">全部状态</option></select></div><div><label class="muted" for="tier-filter">档位</label><select id="tier-filter"><option value="all">全部档位</option><option value="light">轻量</option><option value="standard">标准</option><option value="full">完整</option><option value="unknown">未知</option></select></div><p id="filter-count" class="muted" role="status" aria-live="polite"></p></div><div id="tasks" class="cards"></div></section></div><aside><section class="panel"><h2>文档来源</h2><div id="documents"></div><p class="legend">只读纯文本预览，不执行 Markdown 或 HTML。</p></section><section class="panel"><h2>读取问题</h2><ul id="issues" class="issues"></ul></section><p class="muted">首版仅展示当前服务绑定的一个项目。此页面不批准、不修改状态，也不提供工具拦截或安全沙箱。</p></aside></div>
+<section id="reading-issues" class="panel" hidden><h2>读取问题</h2><ul id="issues" class="issues"></ul></section>
+<div class="dashboard-layout">
+  <details id="document-sources" class="panel">
+    <summary><strong>文档来源</strong> <span id="document-count" class="muted"></span></summary>
+    <div id="documents"></div>
+    <p class="legend">只读纯文本预览，不执行 Markdown 或 HTML。</p>
+  </details>
+  <section class="panel task-panel"><h2>任务卡</h2>
+    <div class="searchbar" role="search" aria-label="任务筛选：搜索、状态与档位"><div class="search-input"><label class="muted" for="task-filter">搜索任务</label><input id="task-filter" type="search" placeholder="搜索编号或标题" autocomplete="off"></div><div><label class="muted" for="state-filter">状态</label><select id="state-filter"><option value="all">全部状态</option></select></div><div><label class="muted" for="tier-filter">档位</label><select id="tier-filter"><option value="all">全部档位</option><option value="light">轻量</option><option value="standard">标准</option><option value="full">完整</option><option value="unknown">未知</option></select></div><button id="clear-filter" type="button">清空筛选</button><p id="filter-count" class="muted" role="status" aria-live="polite"></p></div>
+    <div id="tasks" class="cards"></div>
+  </section>
+</div>
 </main>
 <aside id="drawer" class="drawer" aria-label="文档纯文本预览" hidden><div class="drawer-header"><h2 id="document-title">文档</h2><button id="close-document" type="button">关闭预览</button></div><p id="document-status" class="drawer-status" role="status"></p><pre id="document-content" tabindex="0"></pre></aside>
 <script>
@@ -40,7 +95,7 @@ const labels = {unknown:'未知',pending:'待处理',not_started:'未开始',in_
 function stateLabel(state) { return labels[state] || text(state); }
 function badge(state) {
   const node = element('span', stateLabel(state), 'badge');
-  node.dataset.tone = ['blocked','failed','review_failed','unavailable'].includes(state) ? 'bad' : ['in_progress','active','running'].includes(state) ? 'active' : 'unknown';
+  node.dataset.tone = ['blocked','failed','stale','review_failed','unavailable'].includes(state) ? 'bad' : ['in_progress','implementing','active','running'].includes(state) ? 'active' : 'unknown';
   return node;
 }
 function sourceLabel(source) {
@@ -51,7 +106,7 @@ function sourceLabel(source) {
   return '来源未确认为权威 · ' + (value || '未知');
 }
 function sourceNode(source) { return element('p', sourceLabel(source), 'source'); }
-const expandedTasks = new Set();
+const taskDisclosure = new Map();
 let taskValues = [];
 const phaseLabels = {planning:'就绪与授权',implementation:'实施',verification:'验证',review:'双轴评审',done:'Agent 结束'};
 Object.assign(labels,{error:'执行异常',invalidated:'已失效',created:'待就绪',implementing:'实施中',pending_verification:'待验证',stale:'证据失效',review_failed:'评审未通过',review_passed:'评审通过 · 待人工验收',cancelled:'已取消'});
@@ -81,35 +136,66 @@ function businessLines(value, prefix = '', depth = 0) {
   if (typeof value === 'object') return Object.entries(businessFields).flatMap(([key,label]) => businessLines(value[key],prefix ? prefix + ' / ' + label : label,depth+1));
   return [(prefix ? prefix + '：' : '') + (typeof value === 'boolean' ? value ? '是' : '否' : String(value))];
 }
-function businessDetails(title, sections) {
-  const details = element('details',undefined,'business-section');
-  details.append(element('summary',title),...sections);return details;
+function disclosure(title, className, state, key, load, initiallyOpen = false) {
+  const details = element('details',undefined,className);
+  details.append(element('summary',title));
+  details.open = state.get(key) ?? initiallyOpen;
+  let loaded = false;
+  function populate() {
+    if (loaded) return;
+    details.append(...load());
+    loaded = true;
+  }
+  details.addEventListener('toggle', () => {
+    if (!details.isConnected) return;
+    state.set(key,details.open);
+    if (details.open) populate();
+  });
+  if (details.open) populate();
+  return details;
 }
 function technicalRecord(item) {
   const d = item.details || {};
   const identity = value => Object.fromEntries(['id','kind','stage','evidence_id','round_id','session_id','executor','binding_version','control_digest','snapshot','valid'].filter(key => value[key] !== undefined).map(key => [key,value[key]]));
   return {current_round:item.current_round,executor:item.executor,session_id:item.session_id,binding_version:d.binding_version,control_digest:d.control_digest,evidence:list(d.evidence).map(identity),attempts:list(d.attempts).map(identity),rounds:list(d.rounds).map(identity)};
 }
-function renderBusiness(item) {
+function renderBusiness(item, state, defaultGroup) {
   const root = element('div'), b = item.business || {}, readiness = item.readiness || {};
-  root.append(summarySection('当前阻止条件',list(readiness.blocking),'暂无已记录的当前阻止条件；不代表验证通过'),summarySection('后续阶段',list(readiness.upcoming),'暂无后续阶段缺项记录'));
+  const group = (key, title, load) => disclosure(title,'business-section',state,key,load,key === defaultGroup);
   const d = item.details || {};
   const pending = list(item.pending).flatMap(p => typeof p === 'string' ? [p] : ['待确认：' + text(p.question,'内容未记录'),'影响：' + text(p.impact,'未记录'),'负责人：' + text(p.owner,'未记录'),'恢复条件：' + text(p.resume,'未记录'),'来源：' + text(p.source,'来源未记录')]);
-  root.append(summarySection('当前待确认',pending,'暂无已记录的待确认事项'));
+  root.append(group('attention','当前阻止条件与待确认',() => [
+    summarySection('当前阻止条件',list(readiness.blocking),'暂无已记录的当前阻止条件；不代表验证通过'),
+    summarySection('当前待确认',pending,'暂无已记录的待确认事项'),
+    summarySection('后续阶段',list(readiness.upcoming),'暂无后续阶段缺项记录')
+  ]));
   const todos = list(d.todos);
-  root.append(summarySection('实施步骤',todos.map(t => text(t.title,'未命名步骤') + ' · ' + stateLabel(t.status))));
-  root.append(businessDetails('目标、范围与验收',[
+  root.append(group('scope','目标、范围与验收',() => [
     summarySection('任务目标与范围',[...businessLines(d.goal,'目标'),...businessLines(d.scope,'范围')]),
     summarySection('验收标准',businessLines(d.acceptance)),
     summarySection('人工验收',businessLines(d.human_acceptance), '人工验收尚未发生；Agent 评审通过不等于人工接受或交付'),
     summarySection('文档交付标记',item.human_delivery_completed === true ? ['文档标记已交付（非引擎验收证据）','来源：' + text(item.human_delivery_source)] : ['尚无文档交付完成标记'])
   ]));
   const checks = list((d.plan || {}).checks).map(c => text(c.name || c.title || c.id,'未命名检查') + ' · 命令：' + list(c.argv).filter(v=>typeof v==='string').join(' ') + ' · 工作目录：' + text(c.cwd));
-  root.append(businessDetails('方案、检查计划与交接',[
-    summarySection('方案摘要',businessLines(d.proposal)),summarySection('验证检查计划',checks,'尚无可读检查命令，不能视为验证已执行'),summarySection('交接下一步',businessLines(d.handoff),'尚未记录交接下一步')
+  root.append(group('implementation','方案、实施与交接',() => [
+    summarySection('方案摘要',businessLines(d.proposal)),
+    summarySection('实施步骤',todos.map(t => text(t.title,'未命名步骤') + ' · ' + stateLabel(t.status))),
+    summarySection('基线读取',list(b.baseline).map(v => text(v.path) + ' · ' + text(v.status))),
+    summarySection('批准摘要',list(b.approvals).map(v => text(v.title) + ' · ' + text(v.status))),
+    summarySection('交接下一步',businessLines(d.handoff),'尚未记录交接下一步')
   ]));
-  root.append(summarySection('基线读取' ,list(b.baseline).map(v => text(v.path) + ' · ' + text(v.status))),summarySection('批准摘要',list(b.approvals).map(v => text(v.title) + ' · ' + text(v.status))));
-  root.append(summarySection('双轴评审',list(b.review).flatMap(v => [v.title + '：' + ({pass:'通过（保存记录）',fail:'未通过',invalidated:'已失效',unknown:'未知，未确认通过'}[v.conclusion] || '未知，未确认通过') + ' · 必须解决待办 ' + text(v.unresolved),...list(v.findings).map(f => text(f.message) + ' · ' + (f.resolved === true ? '已解决' : f.required === true ? '必须解决' : '待确认'))])));
+  root.append(group('verification','验证与评审',() => [
+    summarySection('验证检查计划',checks,'尚无可读检查命令，不能视为验证已执行'),
+    renderVerification(b),
+    summarySection('双轴评审',list(b.review).flatMap(v => [v.title + '：' + ({pass:'通过（保存记录）',fail:'未通过',invalidated:'已失效',unknown:'未知，未确认通过'}[v.conclusion] || '未知，未确认通过') + ' · 必须解决待办 ' + text(v.unresolved),...list(v.findings).map(f => text(f.message) + ' · ' + (f.resolved === true ? '已解决' : f.required === true ? '必须解决' : '待确认'))])),
+    summarySection('证据失效摘要',list(b.invalidations),'未记录失效；文件新鲜度仍未核验')
+  ]));
+  root.append(group('history','轮次历史',() => [
+    summarySection('轮次记录',list(b.rounds).map(r => '第 ' + r.number + ' 轮' + (r.current ? '（当前）' : '') + ' · ' + stateLabel(r.state) + ' · ' + (phaseLabels[r.phase] || '未知阶段')))
+  ]));
+  return root;
+}
+function renderVerification(b) {
   const verification = summarySection('验证尝试与逐项诊断',[],'尚无真实验证尝试');
   if (list(b.verification).length) verification.replaceChildren(element('h3','验证尝试与逐项诊断'));
   list(b.verification).forEach((attempt,index) => {
@@ -120,9 +206,46 @@ function renderBusiness(item) {
       const raw = '标准输出\n' + text(check.stdout,'无') + '\n标准错误\n' + text(check.stderr,'无');
       logs.append(element('pre',raw.slice(0,16384) + (raw.length > 16384 || check.truncated ? '\n[日志已达到限额或源日志被截断]' : '')));verification.append(logs);
     });
-  });root.append(verification);
-  root.append(summarySection('证据失效摘要',list(b.invalidations),'未记录失效；文件新鲜度仍未核验'),summarySection('轮次历史',list(b.rounds).map(r => '第 ' + r.number + ' 轮' + (r.current ? '（当前）' : '') + ' · ' + stateLabel(r.state) + ' · ' + (phaseLabels[r.phase] || '未知阶段'))));
-  return root;
+  });
+  return verification;
+}
+function taskHighlight(item) {
+  const b = item.business || {};
+  const reports = list(b.verification);
+  const concerns = list((item.readiness || {}).blocking).map(message => ({label:'当前阻止',message,group:'attention'}));
+  const addConcern = (label, message, genericBlocker) => {
+    const index = concerns.findIndex(concern => concern.message === genericBlocker);
+    const concern = {label,message,group:'verification'};
+    if (index === -1) concerns.push(concern);
+    else concerns[index] = concern;
+  };
+  const latest = reports.at(-1);
+  if (item.state === 'failed') {
+    const check = list(latest?.checks).find(v => (Number.isInteger(v.exit_code) && v.exit_code !== 0) || (v.reason && v.reason !== 'exit'));
+    const message = check ? text(check.id,'检查') + ' · ' + (check.reason && check.reason !== 'exit' ? check.reason : '退出码 ' + check.exit_code) : latest?.failure;
+    addConcern('验证失败',message || '查看最近一次验证尝试','当前验证尚未通过');
+  }
+  if (item.state === 'stale') addConcern('证据失效',list(b.invalidations).at(-1) || '查看需要重新取得的证据','证据快照已失效');
+  if (item.state === 'review_failed') {
+    const axis = list(b.review).find(v => v.conclusion === 'fail');
+    const finding = list(axis?.findings).find(v => v.required === true && v.resolved !== true);
+    addConcern('评审未通过',finding?.message || axis?.title || '查看双轴评审记录','当前双轴评审尚未通过');
+  }
+  for (const pending of list(item.pending)) {
+    concerns.push({label:'待确认',message:text(typeof pending === 'string' ? pending : pending?.question,'内容未记录'),group:'attention'});
+  }
+  if (concerns.length) return {...concerns[0],remaining:concerns.length - 1};
+  const d = item.details || {};
+  if (item.state === 'implementing' && item.progress?.current) return {label:'当前步骤',message:item.progress.current};
+  if (item.state === 'pending_verification') {
+    const checks = list(d.plan?.checks).filter(c => list(c.argv).some(arg => typeof arg === 'string' && arg.trim()));
+    const planned = checks.map(c => text(c.name || c.title || c.id,'未命名检查')).join('、');
+    if (planned) return {label:'下一步',message:'执行验证：' + planned + (reports.length ? '' : '（未记录验证尝试）'),group:'verification'};
+    if (!reports.length) return {label:'验证未记录',message:'尚无验证尝试',group:'verification'};
+  }
+  const handoff = d.handoff;
+  const next = businessLines(handoff?.next_step || handoff?.next_steps || handoff?.next || (typeof handoff === 'string' ? handoff : null))[0];
+  return next ? {label:'下一步',message:next} : {message:item.summary || '暂无当前进展记录'};
 }
 function renderTasks(values) {
   taskValues = list(values);
@@ -135,26 +258,37 @@ function renderTasks(values) {
     const head = element('div',undefined,'card-head');
     head.append(element('h3',text(item.id) + ' · ' + text(item.title)),badge(item.state));
     const progress = item.progress || {};
-    node.append(head,element('p','档位：' + ({light:'轻量',standard:'标准',full:'完整'}[item.tier] || text(item.tier)) + ' · 当前阶段：' + (phaseLabels[item.phase] || '未知')),
-      element('p',item.summary || '文档历史未核验，不构成当前通过证据'),
-      element('p',list(item.flow).map(p => (p.current ? '▶ ' : '') + (phaseLabels[p.id] || p.id)).join(' → '),'muted'),
-      element('p','Todo：' + text(progress.done,'未知') + '/' + text(progress.total,'未知') + ' · 当前步：' + text(progress.current,'无记录')),
-      element('p','更新时间：' + text(item.updated_at) + ' · 活动未知（无退出或心跳证据）','muted'),
-
-      element('p','证据为保存记录，当前文件新鲜度未核验；评审通过不是交付。','legend'),sourceNode(item.source));
-    node.append(renderBusiness(item));
-    const details = element('details',undefined,'technical');details.open = expandedTasks.has(item.id);
-    details.append(element('summary','技术详情 · 原始记录 / 标识 / 绑定（默认折叠）'));
-    // 大体积原始记录仅在展开时序列化，避免轮询刷新为折叠内容重复分配字符串。
-    let loaded = false;
-    const load = () => { if (!loaded) { details.append(detailBlock('内部证据标识与绑定',technicalRecord(item)));loaded = true; } };
-    details.addEventListener('toggle',() => { if (details.open) { expandedTasks.add(item.id);load(); } else expandedTasks.delete(item.id); });
-    if (details.open) load();
-    node.append(details);return node;
+    const tier = {light:'轻量档',standard:'标准档',full:'完整档'}[item.tier] || '档位未知';
+    const meta = [tier,phaseLabels[item.phase] ? phaseLabels[item.phase] + '阶段' : '阶段未知'];
+    if (Number.isInteger(progress.done) && progress.total > 0) meta.push('实施 ' + progress.done + '/' + progress.total);
+    const highlight = taskHighlight(item);
+    const focus = element('p',undefined,'task-focus');
+    if (highlight.remaining !== undefined) focus.dataset.tone = 'attention';
+    if (highlight.label) focus.append(element('strong',highlight.label));
+    focus.append(element('span',highlight.message,'message'));
+    if (highlight.remaining) focus.append(element('span','另有 ' + highlight.remaining + ' 项','remaining muted'));
+    if (!taskDisclosure.has(item.id)) taskDisclosure.set(item.id,new Map());
+    const state = taskDisclosure.get(item.id);
+    const details = disclosure('任务详情','task-details',state,'task',() => {
+      const context = element('div',undefined,'task-context');
+      context.append(element('p',item.summary || '暂无阶段说明'),
+        element('p',list(item.flow).map(p => (p.current ? '▶ ' : '') + (phaseLabels[p.id] || p.id)).join(' → '),'muted'),
+        element('p','更新时间：' + text(item.updated_at) + ' · 活动未知（无退出或心跳证据）','muted'),
+        element('p','证据为保存记录，当前文件新鲜度未核验；评审通过不是交付。','legend'),sourceNode(item.source));
+      return [context,renderBusiness(item,state,highlight.group),
+        disclosure('技术详情 · 原始记录 / 标识 / 绑定','technical',state,'technical',() => [
+          detailBlock('内部证据标识与绑定',technicalRecord(item))
+        ])];
+    });
+    node.append(head,element('p',meta.join(' · '),'muted'),focus,details);
+    return node;
   }) : [element('p',taskValues.length ? '没有匹配任务，试试清空筛选或调整状态和档位；不代表任务已完成。' : '暂无任务记录；等待任务登记，不代表已完成。','empty')]));
 }
 function renderDocuments(values) {
   const items = list(values);
+  const missing = items.filter(item => item.exists === false).length;
+  const unknown = items.filter(item => item.exists !== true && item.exists !== false).length;
+  byId('document-count').textContent = [items.length + ' 份',missing ? missing + ' 份缺失' : '',unknown ? unknown + ' 份状态未知' : ''].filter(Boolean).join(' · ');
   byId('documents').replaceChildren(...(items.length ? items.map(item => {
     const node = element('button', undefined, 'document');
     node.type = 'button';
@@ -180,7 +314,8 @@ function render(data) {
   byId('warning').hidden = !warnings.length;
   renderTasks(data.tasks);renderDocuments(data.documents);
   const issues = list(data.issues);
-  byId('issues').replaceChildren(...(issues.length ? issues.map(issue => element('li',issue)) : [element('li','暂无读取问题')]));
+  byId('reading-issues').hidden = !issues.length;
+  byId('issues').replaceChildren(...issues.map(issue => element('li',issue)));
 }
 async function getJSON(url, signal) {
   const response = await fetch(url,{method:'GET',cache:'no-store',signal,headers:{Accept:'application/json'}});
