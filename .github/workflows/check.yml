@@ -2,7 +2,8 @@ name: checks
 on: [push, pull_request]
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 provides builds for both Python versions in the matrix.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python: ['3.9', '3.12']
