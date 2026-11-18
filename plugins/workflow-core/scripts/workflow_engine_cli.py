@@ -29,7 +29,7 @@ def parser():
     result.add_argument('--db')
     commands = result.add_subparsers(dest='action', required=True, parser_class=Parser)
     reads = ('status', 'snapshot', 'history', 'progress')
-    actions = reads + ('create', 'start', 'resume', 'run', 'complete', 'cancel', 'recover', 'confirm-plan', 'confirm-tier', 'request-confirmation', 'approve-proposal', 'read-baseline', 'register-baseline', 'record-tdd', 'finish-step', 'finish-implementation', 'review', 'update-task', 'adopt-protocol', 'bind-executor', 'repair', 'refine-steps', 'return-task')
+    actions = reads + ('create', 'start', 'resume', 'run', 'complete', 'cancel', 'recover', 'confirm-plan', 'confirm-tier', 'request-confirmation', 'approve-proposal', 'read-baseline', 'register-baseline', 'record-tdd', 'finish-step', 'finish-implementation', 'review', 'sync-review-card', 'update-task', 'adopt-protocol', 'bind-executor', 'repair', 'refine-steps', 'return-task')
     for action in actions:
         command = commands.add_parser(action)
         command.add_argument('--task', required=True)
@@ -59,7 +59,9 @@ def parser():
         if action == 'request-confirmation':
             command.add_argument('--kind', choices=('tier_confirmation', 'approval'), required=True)
         if action == 'read-baseline':
-            command.add_argument('--path', required=True)
+            group = command.add_mutually_exclusive_group(required=True)
+            group.add_argument('--path', action='append', help='基线路径，可重复指定')
+            group.add_argument('--all', action='store_true', help='读取任务声明的全部基线')
             command.add_argument('--max-bytes', type=int, default=65536)
         if action in ('repair', 'refine-steps'):
             command.add_argument('--reason', required=True)
@@ -68,6 +70,10 @@ def parser():
             command.add_argument('--summary', required=True)
         if action == 'return-task':
             command.add_argument('--reason', required=True)
+        if action == 'sync-review-card':
+            command.add_argument('--round', required=True)
+            command.add_argument('--card-path', required=True)
+            command.add_argument('--card-id', required=True)
     return result
 
 
@@ -88,6 +94,47 @@ def human_confirmation(label):
     print(label + '，请输入 confirm：', file=sys.stderr)
     if input().strip() != 'confirm':
         raise ArgumentError('未确认人工流程')
+
+
+def baseline_document(engine, path, limit):
+    data = engine.read_baseline_bytes(path, limit + 1)
+    truncated = len(data) > limit
+    try:
+        content = data[:limit].decode('utf-8', errors='ignore' if truncated else 'strict')
+    except UnicodeDecodeError:
+        raise ArgumentError(f'{path}：基线正文必须为完整 UTF-8 文本，未登记完整读取')
+    return dict(path=path, content=content, truncated=truncated, bytes_read=min(len(data), limit)), data
+
+
+def baseline_receipt(args, task, document, data):
+    return dict(path=document['path'], sha256=hashlib.sha256(data).hexdigest(),
+                bytes_read=len(data), complete=True, executor=args.executor,
+                session_id=args.session, round_id=task['current_round'])
+
+
+def read_baseline_batch(args, engine, task):
+    from workflow_engine.model import EngineError
+
+    paths = list(dict.fromkeys(task['baseline'] if args.all else args.path))
+    if not paths or any(path not in task['baseline'] for path in paths):
+        raise EngineError('BASELINE_INVALID', '基线清单为空或包含未声明的基线')
+    documents = []
+    receipts = []
+    # 限制整个 documents 数组的 UTF-8 JSON 大小，包括转义和分隔符。
+    remaining = args.max_bytes - 2
+    for path in paths:
+        document, data = baseline_document(engine, path, max(0, remaining))
+        remaining -= len(json.dumps(document, ensure_ascii=False).encode('utf-8'))
+        if document['truncated'] or remaining < 0:
+            raise EngineError('BASELINE_BATCH_LIMIT',
+                              f'基线批次超出输出限额（{path}），请用 --path 缩小批次')
+        remaining -= 2
+        documents.append(document)
+        receipts.append(baseline_receipt(args, task, document, data))
+
+    value = engine.register_baselines(args.task, args.version, args.request, receipts)
+    print(json.dumps(dict(ok=True, version=value['version'], documents=documents), ensure_ascii=False))
+    return 0
 
 
 def main(argv=None):
@@ -141,26 +188,22 @@ def main(argv=None):
                     parameters.append(args.reason)
             elif args.action == 'finish-step':
                 parameters += [args.step, args.summary]
+            elif args.action == 'sync-review-card':
+                parameters += [args.round, {'path': args.card_path, 'id': args.card_id}]
             elif args.action == 'read-baseline':
                 if not 0 < args.max_bytes <= 1048576:
                     raise ArgumentError('max-bytes 必须在 1 到 1048576 之间')
-                data = engine.read_baseline_bytes(args.path, args.max_bytes + 1)
-                truncated = len(data) > args.max_bytes
-                if truncated:
-                    content = data[:args.max_bytes].decode('utf-8', errors='ignore')
-                else:
-                    try:
-                        content = data.decode('utf-8')
-                    except UnicodeDecodeError:
-                        raise ArgumentError('基线正文必须为完整 UTF-8 文本，未登记完整读取')
-                document = dict(path=args.path, content=content, truncated=truncated, bytes_read=min(len(data), args.max_bytes))
-                if truncated:
+                if args.all or len(args.path) > 1:
+                    return read_baseline_batch(args, engine, task)
+                document, data = baseline_document(engine, args.path[0], args.max_bytes)
+                if document['truncated']:
                     print(json.dumps(dict(ok=False, code='BASELINE_TRUNCATED', document=document, task=task), ensure_ascii=False))
                     return 2
-                parameters.append(dict(path=args.path, sha256=hashlib.sha256(data).hexdigest(), bytes_read=len(data), complete=True, executor=args.executor, session_id=args.session, round_id=task['current_round']))
+                parameters.append(baseline_receipt(args, task, document, data))
                 operation = engine.register_baseline
             value = operation(*parameters)
-        passed = args.action not in ('run', 'review') or value.get('state') in ('passed', 'review_passed')
+        expected_state = {'run': 'passed', 'review': 'review_passed', 'sync-review-card': 'review_passed'}
+        passed = args.action not in expected_state or value.get('state') == expected_state[args.action]
         key = {'history': 'history', 'progress': 'progress', 'request-confirmation': 'confirmation'}.get(args.action, 'task')
         output = {'ok': passed, key: value}
         if document is not None:

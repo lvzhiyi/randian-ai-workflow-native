@@ -77,3 +77,15 @@ class Store:
         db.execute("INSERT INTO events(task_id,version,action,data) VALUES(?,?,?,?)", (task["id"], task["version"], action, canonical(task)))
         if key is not None:
             db.execute("INSERT INTO requests VALUES(?,?,?)", (key, digest(payload), canonical(task)))
+
+    def stage_card_write(self, db, task, key, payload):
+        db.execute("UPDATE tasks SET data=? WHERE id=?", (canonical(task), task["id"]))
+        db.execute("INSERT INTO requests VALUES(?,?,?)", (key, digest(payload), '{"card_write_pending":true}'))
+
+    def finish_card_write(self, db, task, action, key):
+        self.save(db, task, action)
+        db.execute("UPDATE requests SET response=? WHERE key=?", (canonical(task), key))
+
+    def abandon_card_write(self, db, task, key):
+        db.execute("UPDATE tasks SET data=? WHERE id=?", (canonical(task), task["id"]))
+        db.execute("DELETE FROM requests WHERE key=?", (key,))

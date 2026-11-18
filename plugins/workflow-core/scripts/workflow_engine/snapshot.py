@@ -22,7 +22,7 @@ def sensitive(path):
     return name == ".env" or name.startswith(".env.") or name in {"credentials", "credentials.json", "id_rsa", "id_ed25519", ".npmrc", ".pypirc"} or path.suffix.lower() in {".pem", ".key", ".p12", ".pfx"} or any(part.lower() in {".ssh", "secrets", ".aws"} for part in path.parts)
 
 
-def capture(root, plan_digest):
+def capture_files(root):
     names = set(git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ".").split(b"\0")) - {b""}
     tracked = set(git(root, "ls-files", "-z", "--cached", "--", ".").split(b"\0"))
     stages = git(root, "ls-files", "--stage", "-z", "--", ".").split(b"\0")
@@ -66,4 +66,12 @@ def capture(root, plan_digest):
             entries.append([rel.as_posix(), h.hexdigest(), info.st_mode & 0o111])
         finally:
             os.close(fd)
+    return entries
+
+
+def fingerprint(entries, plan_digest):
     return digest({"files": entries, "plan": plan_digest, "policy": POLICY_VERSION})
+
+
+def capture(root, plan_digest):
+    return fingerprint(capture_files(root), plan_digest)

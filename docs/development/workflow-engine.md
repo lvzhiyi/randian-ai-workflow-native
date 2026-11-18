@@ -33,6 +33,7 @@ CLI `create --details` 必填且必须为 JSON 对象（包括拒绝 null）；C
 - `repair(...,steps,reason)`：仅 failed/review_failed/stale 可用；steps 是非空 `{id,title}` 数组，ID 必须与本轮已有 todo 不重复。原范围授权内追加修复 todo 与 repair attempt，进入 implementing；不改变 scope/control_digest，不重新批准。当前绑定的基线失效时须先重读。完成修复步骤 → finish_implementation → run → review，不能跳过新验证。扩大范围仍须 update_task 并重新授权。
 - `run(...)`：沿用真实 runner、检查计划和快照；执行前后内容一致且每项真实退出零，才得到 passed。失败、超时、异常分别进入 attempt 明细；同范围重跑追加新 attempt。执行期间不持数据库写锁。
 - `review(...,report)`：验证通过且证据仍有效后，双轴结构化评审；通过得到 review_passed，是 Agent 终态，不再要求人工交付。必修未解决不能通过，也不能在重试报告中删除后逃逸；同轴同 ID 显式 resolved=true 才关闭。
+- `sync_review_card(...,round_id,card)`：当前轮次已有有效评审时显式补回写任务卡，复用原验证和评审记录。
 - `update_task(...,changes)`：只接受明确允许的任务字段。goal/scope/tier/acceptance/plan/source/dependencies/baseline/steps/proposal 改变控制摘要，撤销当前批准及相关证据、重置 todos，旧记录保留。选档后首次补齐当前缺失的步骤、方案或验证计划，可以沿用同一档位选择。纯展示措辞使用 note。方案批准绑定 proposal 的 JSON 语义内容。
 - `resume(...)`：同轮继续，只登记活动，不跳门禁、不推测阻塞。`return_task(...,reason,actor)`：人工退回新轮次，旧轮保留、新轮无证据。cancel 后只能人工退回，start/run/resume 均不能自动复活。
 - `cancel(...)`：取消并保持历史；running 期间拒绝取消，避免误报子进程已经停止。`recover(...)` 只恢复已死亡所有者的孤立 running，记 error attempt，不能把异常当成功。
@@ -121,6 +122,8 @@ we repair --task T1 --version VERSION --file repair-steps.json --reason 原范�
 
 `read-baseline --executor ID --session SESSION [--max-bytes N]` 在 JSON 顶层返回 `document:{path,content,truncated,bytes_read}`，正文实际交给 Agent。默认 65536 字节，上限可设 1–1048576；最多读取 N+1 字节检测超限。正文须为完整 UTF-8 文本，非法编码拒绝且不登记。未截断才登记完整回执；超限退出 2、code=BASELINE_TRUNCATED，返回有界正文且不写证据、不增加版本。宿主组件可用 `register-baseline --file receipt.json` 登记相同协议。登记不是 Agent 对文档的理解证明。
 
+上面的单文件形式使用一个 `--path`。用 `--all` 可读取任务声明的全部基线，用多个 `--path` 可读取其中一组。批量响应包含 `ok`、`version` 和 `documents`，每项与单文件的 `document` 结构相同。一批在一个事务内逐份登记，只推进一次任务版本。批量的 `--max-bytes` 限制序列化后整个 `documents` 数组的 UTF-8 字节数（含 JSON 转义），完整响应还包含外层字段。超过限额返回 `BASELINE_BATCH_LIMIT`，缺文件、无效编码或回执校验失败也不会写入半批回执。调用方按宿主输出预算分批，若收到的工具输出不完整，须重读相关正文。
+
 ## 检查计划与资源边界
 
 检查计划保持 v1 严格 schema：顶层 version=1/checks；每项 id/argv/cwd/timeout/covers/acceptance。argv 数组、不执行 shell 字符串；covers 合计必须 format/analyze/test，acceptance 完整覆盖。项目需选择真正检查这些目标的命令，退出零不证明测试质量；包装器应拒绝空测试。每项结果保存 exit_code/reason/stdout/stderr/truncated；selectors 同时排空双管道，stdout/stderr 各保留最多 4096 字节，超限继续排空并标记 truncated，不使用无界 communicate。常见 token/password/secret/API key 与 Authorization 值尽力脱敏；脱敏不等于任意敏感数据检测，检查程序仍不得输出秘密。超时及父进程退出均清理进程组，避免遗留子进程持有管道造成死锁。
@@ -139,6 +142,21 @@ we record-tdd --task T1 --version VERSION --file-json '{"adopted":true}' --reque
 ```
 
 CLI status/snapshot/history 在数据库不存在时直接返回 NOT_FOUND，不创建数据库或父目录。
+
+### 评审通过后的任务卡回写
+
+协议 v2 可在 `create --details-json`、`adopt-protocol` 或 `update-task` 中提供 `"card":{"path":"docs/product/任务/我的模块.md","id":"MOD-R1"}`。建议在人工定档前登记，后续变更会更新控制摘要。路径须位于配置的 `docs.cards_dir` 下，文件须纳入 Git 工作区快照。卡内须有唯一的 `### MOD-R1 …` 标题和 `- 协作状态：…` 字段。兼容旧式 `- 状态：…；优先级：…` 字段，保留同一行的其他信息。
+
+双轴通过且必修项关闭时，引擎把该字段写成「评审通过，待人工验收」。人工验收栏和完成框保持原值。审计记录保留验证和评审的原快照，当前轮次同时认可从原清单计算出的精确投影快照。任务卡属于必读基线时，基线校验认可从该回执原文到本次投影的精确变更。其他内容变化仍走证据失效流程。投影限于当前任务和轮次，同一文件的回写可能使其他任务的全工作区快照失效。
+
+`status` 的 `card_sync` 可显示 `unbound`、`awaiting_review`、`pending`、`synced`、`diverged` 或 `stale`。回写中断时，`card_sync_request` 提供动作和原请求 ID，使用原版本、请求 ID 和参数重试。同一请求可从原文件继续，也可在预期内容已落盘时补录数据库结果。发现工作区冲突时返回失败并保留现场。引擎串行化同库的回写，外部编辑器仍可能在文件检查与原子替换之间写入。已完成的回写被还原为原文时，原证据可继续有效，卡同步状态为 `diverged`。
+
+已有有效评审且缺回写的任务，可显式核对目标后补同步。未在任务登记时绑定的目标只用于此次回写和同轮重评。
+
+```bash
+we sync-review-card --task MOD-R1 --version VERSION --request UNIQUE_ID \
+  --round ROUND_ID --card-path 'docs/product/任务/我的模块.md' --card-id MOD-R1
+```
 
 ### 档位配置强制验证
 

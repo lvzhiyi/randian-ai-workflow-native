@@ -10,6 +10,7 @@ from .model import EngineError, digest
 from .policy import validate_plan
 from .snapshot import capture
 from .config_checks import enforce, configured
+from . import review_card
 
 
 def require(condition, code, message):
@@ -22,7 +23,11 @@ def current(task):
 
 
 def control(task):
-    return digest({key: task.get(key) for key in ('tier', 'acceptance', 'plan', 'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal')})
+    fields = ('tier', 'acceptance', 'plan', 'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal')
+    values = {key: task.get(key) for key in fields}
+    if task.get('card') is not None:
+        values['card'] = task['card']
+    return digest(values)
 
 
 def evidence(task, kind):
@@ -77,8 +82,10 @@ class ProtocolMixin:
             if previous is not None:
                 return previous
             require(not db.execute('SELECT 1 FROM tasks WHERE id=?', (task_id,)).fetchone(), 'TASK_EXISTS', '任务已存在')
-            allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note'}
+            allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note', 'card'}
             require(set(details) <= allowed, 'INPUT_INVALID', '未知任务字段')
+            if details.get('card') is not None:
+                review_card.validate_binding(self.root, details['card'])
             task = dict(copy.deepcopy(details), id=task_id, tier=tier, acceptance=acceptance, plan=copy.deepcopy(plan), plan_digest=plan_hash, root=str(self.root), version=1, protocol_version=2, rounds=[], state='created', phase='planning', results=[], confirmed_digest=None, snapshot=capture(self.root, plan_hash))
             task['control_digest'] = control(task)
             task['verify_config_digest'] = enforce(self.root, task['tier'], task['plan'])
@@ -97,8 +104,10 @@ class ProtocolMixin:
             task = self._load(db, task_id)
             self._version(task, version)
             require(task.get('protocol_version') != 2 and task['state'] not in ('running', 'cancelled'), 'STATE_INVALID', '只能升级未取消的旧任务')
-            allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note'}
+            allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note', 'card'}
             require(isinstance(details, dict) and set(details) <= allowed, 'INPUT_INVALID', '升级详情字段无效')
+            if details.get('card') is not None:
+                review_card.validate_binding(self.root, details['card'])
             task.update(copy.deepcopy(details))
             task.update(protocol_version=2, rounds=[], confirmed_digest=None)
             task['control_digest'] = control(task)
@@ -131,6 +140,8 @@ class ProtocolMixin:
             missing.append('verify_config')
         if task['state'] == 'stale':
             missing.append('snapshot')
+        if not current(task).get('review_card') and task.get('card_sync') != 'pending':
+            task['card_sync'] = 'awaiting_review' if task.get('card') else 'unbound'
         current(task).update(state=task['state'], phase=task['phase'])
         task['missing'] = missing
         return task
@@ -146,10 +157,17 @@ class ProtocolMixin:
                 if changed:
                     task.update(state='stale', phase='verification')
             return self._view(task)
+        pending = task.pop('_pending_card_write', None)
+        task.pop('card_sync_request', None)
+        projection = pending['projection'] if pending else current(task).get('review_card')
+        accepted = {task['snapshot']}
+        if projection and projection['original'] == task['snapshot']:
+            accepted.add(projection['projected'])
+        snapshot = None
         try:
             snapshot = capture(self.root, task['plan_digest'])
             _, signature = configured(self.root, task['tier'])
-            changed = snapshot != task['snapshot'] or signature != task.get('verify_config_digest')
+            changed = snapshot not in accepted or signature != task.get('verify_config_digest')
         except EngineError:
             changed = True
         if changed:
@@ -161,17 +179,32 @@ class ProtocolMixin:
                             item['valid'] = False
             if task['state'] in ('passed', 'review_passed', 'review_failed'):
                 task.update(state='stale', phase='verification')
+        self._refresh_baselines(task, projection)
+        if pending:
+            task['card_sync'] = 'pending'
+            task['card_sync_request'] = {'action': pending['action'], 'request': pending['request']}
+        elif projection:
+            task['card_sync'] = ('stale' if changed else
+                                 'synced' if snapshot == projection['projected'] else 'diverged')
+        else:
+            task['card_sync'] = 'awaiting_review' if task.get('card') else 'unbound'
+        return self._view(task)
+
+    def _refresh_baselines(self, task, projection):
         for item in evidence(task, 'baseline'):
             try:
-                data = self._baseline_bytes(item['data']['path'])
-                valid = hashlib.sha256(data).hexdigest() == item['data']['sha256']
+                path = item['data']['path']
+                observed = hashlib.sha256(self._baseline_bytes(path)).hexdigest()
+                expected = item['data']['sha256']
+                valid = observed == expected or bool(
+                    projection and Path(path).as_posix() == projection['binding']['path']
+                    and observed == projection['after'] and expected == projection['baseline_before'])
             except (OSError, EngineError):
                 valid = False
             if not valid:
                 item['valid'] = False
                 if task['state'] not in ('cancelled', 'created'):
                     task.update(state='stale', phase='planning')
-        return self._view(task)
 
     def status(self, task_id):
         with self.store.read() as db:
@@ -193,7 +226,7 @@ class ProtocolMixin:
                 if r.get('session_id') == session_id and (executor is None or r.get('executor') == executor):
                     candidates.append(task)
             require(len(candidates) <= 1, 'SESSION_AMBIGUOUS', '会话绑定多个活动任务，须显式消歧')
-            return self._refresh(db, candidates[0]) if candidates else None
+            return candidates[0] if candidates else None
 
     def snapshot(self, task_id):
         return self.status(task_id)
@@ -212,26 +245,73 @@ class ProtocolMixin:
         item = self._record(task, stage, data)
         current(task)['attempts'].append(dict(id=uuid.uuid4().hex, stage=stage, status=status, evidence_id=item['id'], round_id=task['current_round'], control_digest=task['control_digest'], snapshot=task['snapshot'], executor=current(task).get('executor'), session_id=current(task).get('session_id'), binding_version=current(task).get('binding_version')))
 
-    def _change(self, action, task_id, version, request, data, operation):
+    def _change(self, action, task_id, version, request, data, operation, *, write_card=False):
         payload = dict(action=action, id=task_id, version=version, data=data, root=str(self.root))
         with self.store.transaction() as db:
             previous = self.store.replay(db, request, payload)
-            if previous is not None:
+            if previous is not None and not previous.get('card_write_pending'):
                 return self._refresh(db, self._load(db, task_id))
             task = self._load(db, task_id)
             self._version(task, version)
             require(task.get('protocol_version') == 2, 'PROTOCOL_REQUIRED', '此操作需要任务协议 v2')
-            require(task['state'] != 'running', 'ACTIVE_OPERATION', '验证正在执行')
-            require(task['state'] != 'cancelled' or action == 'return_task', 'STATE_INVALID', '取消任务须人工退回新轮次')
-            self._refresh(db, task)
-            operation(task)
-            task['version'] += 1
-            r = current(task)
-            r.update(state=task['state'], phase=task['phase'], control_digest=task['control_digest'])
-            task['activity'] = dict(action=action, at=time.time(), round_id=task['current_round'], state=task['state'])
-            self._view(task)
-            self.store.save(db, task, action, request, payload)
-            return task
+            if previous is None:
+                require(not task.get('_pending_card_write'), 'CARD_PENDING', '任务卡回写待恢复，请重试原请求')
+                require(task['state'] != 'running', 'ACTIVE_OPERATION', '验证正在执行')
+                require(task['state'] != 'cancelled' or action == 'return_task', 'STATE_INVALID', '取消任务须人工退回新轮次')
+                self._refresh(db, task)
+                original = copy.deepcopy(task) if write_card else None
+                binding = operation(task)
+                if not write_card or not binding:
+                    self._finish_change(task, action)
+                    self.store.save(db, task, action, request, payload)
+                    return task
+                projection = review_card.prepare(self.root, original, binding, current(original).get('review_card'))
+                original['_pending_card_write'] = dict(projection=projection, action=action, request=request)
+                original['card_sync'] = 'pending'
+                self.store.stage_card_write(db, original, request, payload)
+        return self._finish_card_write(action, task_id, version, request, payload, operation)
+
+    def _finish_change(self, task, action):
+        task['version'] += 1
+        current(task).update(state=task['state'], phase=task['phase'], control_digest=task['control_digest'])
+        task['activity'] = dict(action=action, at=time.time(), round_id=task['current_round'], state=task['state'])
+        self._view(task)
+
+    def _finish_card_write(self, action, task_id, version, request, payload, operation):
+        with self.store.transaction() as db:
+            previous = self.store.replay(db, request, payload)
+            task = self._load(db, task_id)
+            require(previous is not None, 'CARD_CONFLICT', '回写已被其他请求处理，请重新读取当前状态')
+            if not previous.get('card_write_pending'):
+                return self._refresh(db, task)
+            self._version(task, version)
+            pending = task.pop('_pending_card_write')
+            require(pending['request'] == request, 'CARD_PENDING', '任务卡回写须使用原请求')
+            projection = pending['projection']
+            try:
+                review_card.clean_temporary(self.root, projection)
+                require(enforce(self.root, task['tier'], task['plan']) == task['verify_config_digest'],
+                        'CARD_CONFLICT', '回写期间验证配置已变化')
+                completed = copy.deepcopy(task)
+                self._refresh_baselines(completed, projection)
+                require(completed['state'] != 'stale', 'CARD_CONFLICT', '回写前必读基线已变化')
+                review_card.apply(self.root, task['plan_digest'], projection)
+                current(completed)['review_card'] = {key: value for key, value in projection.items() if key != 'temporary'}
+                self._refresh(db, completed)
+                require(completed['card_sync'] == 'synced' and completed['state'] != 'stale',
+                        'CARD_CONFLICT', '完成回写前工作区或基线已变化')
+                operation(completed)
+            except EngineError as error:
+                if error.code == 'CARD_WRITE':
+                    raise
+                failure = error
+                self._refresh(db, task)
+                self.store.abandon_card_write(db, task, request)
+            else:
+                self._finish_change(completed, action)
+                self.store.finish_card_write(db, completed, action, request)
+                return completed
+        raise failure
 
     def confirm_tier(self, task_id, version, request, actor, selected_tier=None):
         def apply(task):
@@ -278,15 +358,24 @@ class ProtocolMixin:
         return self.read_baseline_bytes(path)
 
     def register_baseline(self, task_id, version, request, receipt):
+        return self._change('register_baseline', task_id, version, request, receipt,
+                            lambda task: self._record_baseline(task, receipt))
+
+    def register_baselines(self, task_id, version, request, receipts):
         def apply(task):
-            require(isinstance(receipt, dict) and receipt.get('complete') is True and receipt.get('executor') and receipt.get('round_id') == task['current_round'], 'BASELINE_INVALID', '需要完整读取、执行者与当前轮次')
-            require(receipt.get('path') in task.get('baseline', []), 'BASELINE_INVALID', '未声明的基线')
-            require(receipt.get('executor') == current(task).get('executor') and receipt.get('session_id') == current(task).get('session_id'), 'BASELINE_INVALID', '回执执行者与会话须匹配当前绑定')
-            data = self._baseline_bytes(receipt['path'])
-            require(type(receipt.get('bytes_read')) is int and receipt['bytes_read'] == len(data) and receipt.get('sha256') == hashlib.sha256(data).hexdigest(), 'BASELINE_INVALID', '基线缺失、截断或摘要不符')
-            bound_receipt = dict(receipt, binding_version=current(task)['binding_version'])
-            self._record(task, 'baseline', bound_receipt)
-        return self._change('register_baseline', task_id, version, request, receipt, apply)
+            require(bool(receipts), 'BASELINE_INVALID', '基线清单为空')
+            for receipt in receipts:
+                self._record_baseline(task, receipt)
+        return self._change('register_baselines', task_id, version, request, receipts, apply)
+
+    def _record_baseline(self, task, receipt):
+        require(isinstance(receipt, dict) and receipt.get('complete') is True and receipt.get('executor') and receipt.get('round_id') == task['current_round'], 'BASELINE_INVALID', '需要完整读取、执行者与当前轮次')
+        require(receipt.get('path') in task.get('baseline', []), 'BASELINE_INVALID', '未声明的基线')
+        require(receipt.get('executor') == current(task).get('executor') and receipt.get('session_id') == current(task).get('session_id'), 'BASELINE_INVALID', '回执执行者与会话须匹配当前绑定')
+        data = self._baseline_bytes(receipt['path'])
+        require(type(receipt.get('bytes_read')) is int and receipt['bytes_read'] == len(data) and receipt.get('sha256') == hashlib.sha256(data).hexdigest(), 'BASELINE_INVALID', '基线缺失、截断或摘要不符')
+        bound_receipt = dict(receipt, binding_version=current(task)['binding_version'])
+        self._record(task, 'baseline', bound_receipt)
 
     def start(self, task_id, expected_version, request_id):
         if self.status(task_id).get('protocol_version') != 2:
@@ -346,10 +435,28 @@ class ProtocolMixin:
                 passed = passed and all(unresolved.values()) and axis['conclusion'] == 'pass' and not any(f['required'] and not f['resolved'] for f in axis['findings'])
             self._attempt(task, 'review', 'passed' if passed else 'failed', report)
             task.update(state='review_passed' if passed else 'review_failed', phase='done' if passed else 'review')
-        return self._change('review', task_id, version, request, report, apply)
+            projection = current(task).get('review_card')
+            return (task.get('card') or (projection and projection['binding'])) if passed else None
+        return self._change('review', task_id, version, request, report, apply, write_card=True)
+
+    def sync_review_card(self, task_id, version, request, round_id, binding):
+        def apply(task):
+            require(task['current_round'] == round_id, 'CARD_CONFLICT', '只能同步当前执行轮次')
+            require(task['state'] == 'review_passed' and not task['missing'], 'CHECKS_REQUIRED', '须有当前有效的双轴评审证据')
+            reports = evidence(task, 'review')
+            require(reports and reports[-1]['data'].get('snapshot') == task['snapshot']
+                    and any(item['data'].get('snapshot') == task['snapshot'] for item in evidence(task, 'verification')),
+                    'CHECKS_REQUIRED', '缺少与原快照绑定的验证或评审证据')
+            projection = current(task).get('review_card')
+            bound = task.get('card') or (projection and projection['binding'])
+            require(bound is None or bound == binding, 'CARD_CONFLICT', '回写目标与已绑定的任务卡不一致')
+            require(bool(binding), 'CARD_INVALID', '补同步须提供任务卡绑定')
+            return binding
+        return self._change('sync_review_card', task_id, version, request, [round_id, binding], apply, write_card=True)
 
     def _invalidate_control(self, task):
         task['control_digest'] = control(task)
+        current(task).pop('review_card', None)
         for item in current(task)['evidence']:
             item['valid'] = False
         for attempt in current(task)['attempts']:
@@ -360,8 +467,10 @@ class ProtocolMixin:
 
     def update_task(self, task_id, version, request, changes):
         def apply(task):
-            allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note', 'tier', 'acceptance', 'plan'}
+            allowed = {'goal', 'scope', 'source', 'dependencies', 'baseline', 'steps', 'proposal', 'note', 'tier', 'acceptance', 'plan', 'card'}
             require(isinstance(changes, dict) and set(changes) <= allowed, 'INPUT_INVALID', '未知控制字段')
+            if changes.get('card') is not None:
+                review_card.validate_binding(self.root, changes['card'])
             # 初次补齐定档后才需要的材料时，沿用用户对同一档位和范围的选择。
             changed = {key for key, value in changes.items() if value != task.get(key)} - {'note'}
             fillable = set(task['missing']) & {'steps', 'proposal'}

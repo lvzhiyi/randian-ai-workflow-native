@@ -128,6 +128,63 @@ class CliTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_batch_baseline_load_is_atomic_and_unblocks_start(self):
+        from test_protocol import ProtocolTests
+
+        fixture = ProtocolTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        task = fixture.create()
+        paths = ['baseline.md', 'other.md', 'third.md']
+        task = fixture.call('update_task', task, {'baseline': paths})
+        task = fixture.call('confirm_tier', task, '人工')
+        task = fixture.call('bind_executor', task, 'reader', 'session')
+        (fixture.root / 'other.md').write_text('第二份规范', encoding='utf-8')
+        last = fixture.root / 'third.md'
+        command = [sys.executable, str(CLI), '--root', str(fixture.root),
+                   '--db', str(fixture.e.db), 'read-baseline', '--task', 't',
+                   '--version', str(task['version']), '--request', 'batch',
+                   '--executor', 'reader', '--session', 'session', '--all']
+
+        def load(*args):
+            result = subprocess.run(command + list(args), capture_output=True, text=True)
+            return result.returncode, json.loads(result.stdout)
+
+        for contents, options, expected_code in (
+            (None, (), 'BASELINE_INVALID'),
+            (b'\xff', (), 'ARGUMENT'),
+            ('第三份规范'.encode(), ('--max-bytes', '100'), 'BASELINE_BATCH_LIMIT'),
+        ):
+            with self.subTest(expected_code=expected_code):
+                if contents is not None:
+                    last.write_bytes(contents)
+                code, output = load(*options)
+                self.assertEqual(code, 2, output)
+                self.assertEqual(output['code'], expected_code, output)
+                latest = fixture.e.status('t')
+                self.assertEqual(latest['version'], task['version'])
+                self.assertEqual(latest['rounds'][-1]['evidence'], task['rounds'][-1]['evidence'])
+                self.assertIn('baseline', latest['missing'])
+
+        code, output = load()
+        self.assertEqual(code, 0, output)
+        self.assertEqual([(doc['path'], doc['content']) for doc in output['documents']],
+                         list(zip(paths, ['工程规范全文', '第二份规范', '第三份规范'])))
+        latest = fixture.e.status('t')
+        self.assertEqual(output['version'], task['version'] + 1)
+        receipts = [item['data']['path'] for item in latest['rounds'][-1]['evidence']
+                    if item['kind'] == 'baseline']
+        self.assertEqual(receipts, paths)
+        self.assertEqual(load(), (code, output))
+        self.assertEqual(fixture.call('start', latest)['state'], 'implementing')
+
+        last.write_text('规范已更新', encoding='utf-8')
+        refreshed = fixture.e.status('t')
+        valid_paths = [item['data']['path'] for item in refreshed['rounds'][-1]['evidence']
+                       if item['kind'] == 'baseline' and item['valid']]
+        self.assertEqual(valid_paths, paths[:2])
+        self.assertIn('baseline', refreshed['missing'])
+
 
 if __name__ == "__main__":
     unittest.main()

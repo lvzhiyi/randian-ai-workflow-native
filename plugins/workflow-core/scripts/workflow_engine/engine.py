@@ -150,6 +150,7 @@ class LegacyEngine:
                 task = self._load(db, task_id)
                 self._version(task, expected_version)
                 if task.get("protocol_version") == 2:
+                    require(not task.get("_pending_card_write"), "CARD_PENDING", "任务卡回写待恢复，请重试原请求")
                     self._refresh(db, task)
                     require(task["state"] in ("pending_verification", "failed", "stale", "passed", "review_failed", "review_passed"), "STATE_INVALID", "实施尚未完成或已取消")
                     require(not readiness(task), "MISSING", "就绪证据失效或缺失")
