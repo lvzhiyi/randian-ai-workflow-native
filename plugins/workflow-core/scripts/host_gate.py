@@ -25,14 +25,19 @@ CONFIRM_HELP = ("ENGINE_CONFIRMATION_UNSUPPORTED：当前宿主回调没有匹�
                 "确认绑定当前任务、轮次、版本及控制摘要。")
 
 
-def project_root(cwd):
-    """最近配置为边界，禁止借用父项目状态。"""
+def project_root(cwd, session_id=None):
+    """最近配置为边界，禁止借用父项目状态；未接入的 .git 仓库仅在活跃规划登记时纳入。"""
     path = Path(cwd or ".").resolve()
+    session = session_id if session_id is not None else CURRENT_EVENT.get().get("session_id")
     for folder in (path, *path.parents):
         if (folder / "ai-workflow.yaml").is_file():
             return folder
         if (folder / ".git").exists():
-            return folder
+            if isinstance(session, str) and 0 < len(session) <= 512:
+                from workflow_planning_cli import read_record
+                if read_record(folder, session):
+                    return folder
+            break
     return None
 
 
@@ -663,10 +668,10 @@ def context(event):
         return post_tool(event)
     try:
         from workflow_planning_cli import read_record
-        planning = read_record(project_root(event.get("cwd")), event.get("session_id"))
+        planning = read_record(root, event.get("session_id"))
         if planning:
             return "ENGINE_PLANNING：" + json.dumps({k: planning[k] for k in ("operation", "paths", "expires_at")}, ensure_ascii=False) + "；结束或交接前 CLI close，不授权产品实施。"
-        task = load_task(project_root(event.get("cwd")))
+        task = load_task(root)
         error = binding_error(event, task)
         if error:
             return error

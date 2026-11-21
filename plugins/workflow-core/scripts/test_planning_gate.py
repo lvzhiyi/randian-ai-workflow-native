@@ -94,10 +94,13 @@ class PlanningGateTests(unittest.TestCase):
     def test_init_bootstrap_without_configuration(self):
         (self.root / "ai-workflow.yaml").unlink()
         (self.root / ".git").mkdir()
+        self.assertIsNone(host_gate.pre_tool(self.event(file_path="src/test.py")))
         self.run_cli("open", "--operation", "init", "--path", "ai-workflow.yaml", "--path", "AGENTS.md", "--path", "docs/product/项目首页.md")
         for path in ("ai-workflow.yaml", "AGENTS.md", "docs/product/项目首页.md"):
             self.assertIsNone(host_gate.pre_tool(self.event(file_path=path)))
         self.assertIsNotNone(host_gate.pre_tool(self.event(file_path="src/test.py")))
+        self.run_cli("close")
+        self.assertIsNone(host_gate.pre_tool(self.event(file_path="src/test.py")))
 
     def test_registration_rejects_arbitrary_or_disguised_targets(self):
         for path in ("src/test.py", "docs/product/任意.md", "docs/product/任务/test.py.md", "docs/product/任务/../other.md", "AGENTS.md"):

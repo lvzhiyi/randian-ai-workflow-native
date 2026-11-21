@@ -145,11 +145,15 @@ class CursorGateTests(unittest.TestCase):
 
     def test_unconfigured_workspace_bypasses_gate(self):
         (self.root / "ai-workflow.yaml").unlink()
-        for tool in ("Shell", "Write", "WebSearch", "Task"):
-            self.assertEqual(self.call(self.event(tool, command="python3 init.py")), {"permission": "allow"})
-        for name in ("sessionStart", "postToolUse"):
-            self.assertEqual(self.call(dict(self.event(), hook_event_name=name)), {})
-        self.assertEqual(self.call(dict(self.event(), hook_event_name="subagentStart")), {"permission": "allow"})
+        for setup in ("plain", "git"):
+            if setup == "git":
+                (self.root / ".git").mkdir()
+            for tool in ("Shell", "Write", "WebSearch", "Task"):
+                self.assertEqual(self.call(self.event(tool, command="python3 init.py")), {"permission": "allow"})
+            for name in ("sessionStart", "postToolUse"):
+                self.assertEqual(self.call(dict(self.event(), hook_event_name=name)), {})
+            self.assertEqual(self.call(dict(self.event(), hook_event_name="beforeSubmitPrompt", prompt="hi")), {})
+            self.assertEqual(self.call(dict(self.event(), hook_event_name="subagentStart")), {"permission": "allow"})
 
     def test_configured_errors_never_bypass(self):
         (self.root / "ai-workflow.yaml").write_text("version: 999\n")

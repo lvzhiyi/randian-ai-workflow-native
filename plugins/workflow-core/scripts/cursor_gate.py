@@ -91,7 +91,7 @@ def handle(payload):
     event = normalize(payload)
     name, tool = event["hook_event_name"], event["tool_name"]
     # 初始化前不拦工具；解析故障仍由入口拒绝，不能降级为旁路。
-    if host_gate.project_root(event["cwd"]) is None:
+    if host_gate.project_root(event["cwd"], event["session_id"]) is None:
         return {"permission": "allow"} if name in {"PreToolUse", "SubagentStart"} else {}
     if name == "UserPromptSubmit":
         # 回复照常进入会话，由 Agent 读 status 并在版本失效时重新展示选项。

@@ -31,6 +31,8 @@ def handle(event, root=None):
     """旧 disabled 文件与 engine.enabled 均不再成为门禁绕过条件。"""
     if not isinstance(event, dict):
         raise ValueError("事件必须是 JSON 对象")
+    if project_root(event.get("cwd"), event.get("session_id")) is None:
+        return
     if event.get("hook_event_name") == "PreToolUse":
         reason = pre_tool(event)
         if reason:
@@ -39,8 +41,6 @@ def handle(event, root=None):
             updated = safe_shell_input(event)
             if updated:
                 print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": updated}}, ensure_ascii=False))
-        return
-    if project_root(event.get("cwd")) is None:
         return
     if event.get("hook_event_name") in {"SessionStart", "Stop", "PostToolUse", "UserPromptSubmit"}:
         message = context(event)

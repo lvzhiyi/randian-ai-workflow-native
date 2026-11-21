@@ -47,6 +47,18 @@ class GateTests(unittest.TestCase):
         other = Path(self.tmp.name) / "other"
         other.mkdir()
         self.assertEqual(self.hook("PreToolUse", cwd=other, tool_name="Write", tool_input={"file_path": "x.py"}).stdout, "")
+        # 未接入的独立 .git 仓库（哪怕嵌套在已接入父目录下）也必须完全旁路门禁。
+        for repo in (other / "git_repo", self.project / "nested_git_repo"):
+            (repo / ".git").mkdir(parents=True)
+            for host in ("claude", "codex"):
+                for tool, data in (("Write", {"file_path": "x.py"}), ("Bash", {"command": "npm test"}), ("mcp__example__update", {})):
+                    result = self.hook("PreToolUse", host, cwd=repo, tool_name=tool, tool_input=data)
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "")
+                for event_name in ("SessionStart", "UserPromptSubmit", "PostToolUse", "Stop"):
+                    result = self.hook(event_name, host, cwd=repo)
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "")
 
     def test_malformed_json_is_explicit_nonzero(self):
         for payload in ("not json", "[]", "null"):
