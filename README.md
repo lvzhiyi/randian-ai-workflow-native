@@ -1,3 +1,4 @@
+https://github.com/user-attachments/assets/6c399680-073c-4bd3-8bb2-d61fae7f9972
 # SpecLock
 
 **English** | [简体中文](README.zh-CN.md)
