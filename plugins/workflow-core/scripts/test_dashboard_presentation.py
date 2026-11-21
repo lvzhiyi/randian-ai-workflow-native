@@ -80,6 +80,7 @@ class PresentationTests(unittest.TestCase):
         '''
         script = page_html().split("<script>")[1].split("</script>")[0].split("byId('refresh').addEventListener")[0]
         assertions = r'''
+        if(badge('review_passed').dataset.tone!=='good'||badge('passed').dataset.tone!=='good'||badge('failed').dataset.tone!=='bad'||badge('implementing').dataset.tone!=='active')throw Error('徽章色调映射错误');
         nodes['state-filter']=new Node('select');nodes['state-filter'].value='all';nodes['tier-filter']=new Node('select');nodes['tier-filter'].value='all';
         renderTasks([fixture]); const card=nodes.tasks.children[0];
         const initial=visible(card,true);

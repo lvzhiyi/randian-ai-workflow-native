@@ -26,9 +26,12 @@ MAX_ENGINE_JSON_BYTES = 1024 * 1024
 STAGES = (("prd", "需求接收"), ("breakdown", "需求拆解"), ("kickoff", "开工准备"),
           ("proposal", "方案提案"), ("implementation", "实施"),
           ("verification", "验证"), ("review", "评审"), ("delivery", "交付"))
-STATES = {"已完成": "completed", "自测完成": "completed", "进行中": "in_progress",
-          "待开始": "pending", "未开始": "pending", "受阻": "blocked",
-          "待确认": "blocked", "可评审": "ready", "实施完成待验证": "pending",
+STATES = {"已完成": "completed", "自测完成": "completed", "人工验收通过": "completed", "已交付": "completed",
+          "进行中": "in_progress", "实施中": "in_progress", "研发中": "in_progress",
+          "待处理": "pending", "待开始": "pending", "未开始": "pending", "待开发": "pending", "待联调": "pending",
+          "受阻": "blocked", "待确认": "blocked", "可评审": "ready",
+          "评审通过": "ready", "评审通过，待人工验收": "ready", "待人工验收": "ready",
+          "实施完成待验证": "pending", "待验证": "pending",
           "已取消": "cancelled", "通过": "passed", "失败": "failed"}
 KNOWN_STATES = {"unknown", "created", "ready", "running", "passed", "completed", "failed",
                 "stale", "cancelled", "pending", "in_progress", "blocked"}
@@ -183,13 +186,18 @@ def _parse(text, path, result, stage_map, task_map):
                 pair = re.split("[:：]", part.strip(), maxsplit=1)
                 if len(pair) == 2:
                     fields[pair[0].strip()] = pair[1].strip()
-            required = ("待确认", "影响", "负责人", "恢复条件", "来源")
+            required = ("待确认", "影响", "恢复条件")
             if all(fields.get(key) for key in required):
-                result["pending"].append({"question": fields["待确认"], "impact": fields["影响"],
-                    "owner": fields["负责人"], "resume": fields["恢复条件"],
-                    "source": source + "｜" + fields["来源"]})
+                entry = {
+                    "question": fields["待确认"],
+                    "impact": fields["影响"],
+                    "owner": fields.get("负责人") or "未指定",
+                    "resume": fields["恢复条件"],
+                    "source": source + ("｜" + fields["来源"] if fields.get("来源") else ""),
+                }
+                result["pending"].append(entry)
                 if current is not None:
-                    current.setdefault("pending", []).append(result["pending"][-1])
+                    current.setdefault("pending", []).append(entry)
             else:
                 result["issues"].append("待确认记录字段不完整：" + source)
     # 复选框只约束是否完成，不把未勾选误当成具体协作状态；延后处理以消除字段顺序影响。

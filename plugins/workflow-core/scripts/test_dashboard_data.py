@@ -134,7 +134,7 @@ class DashboardDataTest(unittest.TestCase):
     def test_checkbox_constraints_preserve_noncompleted_state(self):
         self.config(extra="docs:\n  cards_dir: cards\n")
         for checked in (False, True):
-            for raw in ("进行中", "实施完成待验证", "待开发", "待验证", "已完成"):
+            for raw in ("待处理", "进行中", "实施完成待验证", "待开发", "待验证", "已完成"):
                 for reversed_order in (False, True):
                     with self.subTest(checked=checked, raw=raw, reversed_order=reversed_order):
                         baseline = self.api._state(raw)
@@ -146,6 +146,14 @@ class DashboardDataTest(unittest.TestCase):
                         conflict = checked != (baseline == "completed")
                         self.assertEqual(data["tasks"][0]["state"], "unknown" if conflict else baseline)
                         self.assertEqual(any("冲突" in issue for issue in data["issues"]), conflict)
+
+    def test_lean_pending_item_without_owner_or_source_is_accepted(self):
+        self.config(extra="docs:\n  cards_dir: cards\n")
+        self.write("cards/a.md", "### A-R1 登录\n- [ ] 子需求完成\n- 协作状态：待处理\n- 待确认：缺契约｜影响：登录｜恢复条件：补齐字段\n")
+        data = self.build()
+        self.assertEqual(data["issues"], [])
+        self.assertEqual(data["tasks"][0]["state"], "pending")
+        self.assertEqual(data["pending"][0]["resume"], "补齐字段")
 
     def test_unchecked_box_without_state_is_pending(self):
         self.config(extra="docs:\n  cards_dir: cards\n")
