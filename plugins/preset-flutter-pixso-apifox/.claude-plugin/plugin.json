@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "组合包：Flutter 项目 + Pixso 设计 + Apifox 接口，一次装齐，含 Context7、Superpowers 与官方 Dart and Flutter 插件（需先添加 flutter/agent-plugins marketplace）",
   "author": { "name": "吕治易" },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "dependencies": [
     "workflow-core",
     "stack-flutter",

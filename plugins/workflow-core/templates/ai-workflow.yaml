@@ -1,4 +1,4 @@
-# ai-dev-workflow 项目配置（放在项目根目录，提交进 git）
+# SpecLock 工作流项目配置（放在项目根目录，提交进 git）
 # 推荐运行 /workflow-core:init 自动探测并生成；也可以手动复制后按实际填写。
 #
 # 格式：YAML 受限子集，由插件自带解析器读取（不依赖 PyYAML）

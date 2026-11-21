@@ -1,6 +1,6 @@
 # 工作流模拟项目
 
-本项目用于从原始 PRD 演练 ai-dev-workflow；所有数据均应为合成数据。
+本项目用于从原始 PRD 演练 SpecLock 工作流；所有数据均应为合成数据。
 
 - 需求来源：[PRD v1.0](PRD.md)
 - 拆解入口：[项目首页](docs/product/项目首页.md)

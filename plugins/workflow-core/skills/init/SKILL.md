@@ -1,6 +1,6 @@
 ---
 name: init
-description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，并按需生成文档骨架（项目首页、需求说明、任务总览、设计索引、术语表、工程规范）。项目第一次接入 ai-dev-workflow 插件、项目根还没有 ai-workflow.yaml、用户说“初始化工作流 / 接入插件 / 生成工作流配置”，或项目的技术栈、设计工具、接口工具、验证命令发生变化需要刷新配置时使用。
+description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，并按需生成文档骨架（项目首页、需求说明、任务总览、设计索引、术语表、工程规范）。项目第一次接入 SpecLock（`speclock`）插件、项目根还没有 ai-workflow.yaml、用户说“初始化工作流 / 接入插件 / 生成工作流配置”，或项目的技术栈、设计工具、接口工具、验证命令发生变化需要刷新配置时使用。
 ---
 
 # 初始化项目工作流配置与文档骨架
@@ -127,7 +127,7 @@ docs/development/handoffs/<task-id>.md  其他档位首次跨会话交接时
 
 用户同意后，再在 `.claude/settings.json` 写入 `extraKnownMarketplaces` 和 `enabledPlugins`，让团队成员打开项目时收到安装提示：已有文件时合并，不覆盖其他设置。
 
-`extraKnownMarketplaces` 除了 `ai-dev-workflow`，还要列出所选插件依赖的**其他 marketplace**：依赖解析不会自动添加 marketplace，缺了依赖就装不上。例如 Flutter preset 依赖官方 `dart-flutter`，需要加 `"dart-flutter": {"source": {"source": "github", "repo": "flutter/agent-plugins"}}`（`claude-plugins-official` 是内置的，不用加）。
+`extraKnownMarketplaces` 除了 `speclock`，还要列出所选插件依赖的**其他 marketplace**：依赖解析不会自动添加 marketplace，缺了依赖就装不上。例如 Flutter preset 依赖官方 `dart-flutter`，需要加 `"dart-flutter": {"source": {"source": "github", "repo": "flutter/agent-plugins"}}`（`claude-plugins-official` 是内置的，不用加）。
 
 ## 6. 收尾
 
