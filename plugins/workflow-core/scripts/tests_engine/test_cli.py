@@ -284,6 +284,61 @@ class CliTests(unittest.TestCase):
             self.assertEqual(reviewed['task']['state'], 'review_passed')
             self.assertIn('progress', reviewed)
 
+    def test_list_reads_project_tasks_without_creating_database(self):
+        sys.path.insert(0, str(CLI.parent))
+        from workflow_engine import Engine
+
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            root = base / 'repo'
+            other_root = base / 'other'
+            for item in (root, other_root):
+                item.mkdir()
+                subprocess.run(['git', 'init', '-q', str(item)], check=True)
+            db = base / 'state.sqlite'
+
+            def run_list(*args):
+                proc = subprocess.run(
+                    [sys.executable, str(CLI), '--root', str(root), '--db', str(db), 'list', *args],
+                    capture_output=True, text=True,
+                    env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
+                )
+                return proc.returncode, json.loads(proc.stdout)
+
+            code, empty = run_list()
+            self.assertEqual(code, 0, empty)
+            self.assertEqual(empty['tasks'], [])
+            self.assertFalse(db.exists())
+
+            plan = {'version': 1, 'checks': [{'id': 'c1', 'argv': ['true'], 'cwd': '.', 'timeout': 2, 'covers': ['format', 'analyze', 'test'], 'acceptance': ['A1']}]}
+            details = {'goal': '任务目标', 'scope': ['src'], 'source': '需求', 'dependencies': [], 'baseline': [], 'steps': [{'id': 's1', 'title': '步骤'}]}
+            engine = Engine(root, db)
+            t1 = engine.create('T1', 'light', ['A1'], plan, 'c1', details=details)
+            engine.bind_executor('T1', t1['version'], 'b1', 'agent', 'sess-1')
+            t2 = engine.create('T2', 'light', ['A1'], plan, 'c2', details=details)
+            engine.cancel('T2', t2['version'], 'x2')
+            Engine(other_root, db).create('OTHER', 'light', ['A1'], plan, 'c3', details=details)
+
+            code, listed = run_list()
+            self.assertEqual(code, 0, listed)
+            self.assertEqual([item['id'] for item in listed['tasks']], ['T1', 'T2'])
+            self.assertEqual(listed['tasks'][0]['session_id'], 'sess-1')
+            self.assertEqual(listed['tasks'][0]['executor'], 'agent')
+
+            code, active = run_list('--active')
+            self.assertEqual(code, 0, active)
+            self.assertEqual([item['id'] for item in active['tasks']], ['T1'])
+
+            link = base / 'link.sqlite'
+            link.symlink_to(db)
+            proc = subprocess.run(
+                [sys.executable, str(CLI), '--root', str(root), '--db', str(link), 'list'],
+                capture_output=True, text=True,
+                env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
+            )
+            self.assertEqual(proc.returncode, 2)
+            self.assertEqual(json.loads(proc.stdout)['code'], 'DB_LOCATION')
+
 
 if __name__ == "__main__":
     unittest.main()

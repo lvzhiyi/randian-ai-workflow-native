@@ -63,7 +63,9 @@ def normalize(payload):
     session = payload.get("conversation_id")
     if not isinstance(session, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", session) or session in {".", ".."}:
         raise ValueError("conversation_id 无效")
-    data = payload.get("tool_input", {})
+    data = payload.get("tool_input")
+    if data is None:
+        data = {}
     if not isinstance(data, dict):
         raise ValueError("tool_input 必须是对象")
     if name in {"preToolUse", "postToolUse"} and not isinstance(payload.get("tool_name"), str):
@@ -114,8 +116,10 @@ def handle(payload):
         return result
     if name == "SessionStart":
         workflow_context = host_gate.context(event) or host_gate.CONFIRM_HELP
+        cli = Path(__file__).with_name("workflow_engine_cli.py").resolve()
         context = (
             f"Cursor conversation_id: {event['session_id']}\n"
+            f"引擎 CLI（每次运行须前缀 WORKFLOW_HOST=cursor，勿使用未展开的 ${{CURSOR_PLUGIN_ROOT}}）: {cli}\n"
             f"文档规划登记命令的 --session 使用上述会话 ID。\n{workflow_context}"
         )
         return {"env": {"WORKFLOW_HOST": "cursor"}, "additional_context": bounded(context)}

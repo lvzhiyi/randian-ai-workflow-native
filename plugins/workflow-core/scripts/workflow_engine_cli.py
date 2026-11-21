@@ -31,6 +31,8 @@ def parser():
     result.add_argument('--root', default='.')
     result.add_argument('--db')
     commands = result.add_subparsers(dest='action', required=True, parser_class=Parser)
+    list_command = commands.add_parser('list')
+    list_command.add_argument('--active', action='store_true', help='仅显示未终态的活动任务')
     reads = ('status', 'snapshot', 'history', 'progress')
     actions = reads + ('prepare', 'begin', 'create', 'start', 'resume', 'run', 'complete', 'cancel', 'recover', 'confirm-plan', 'confirm-tier', 'request-confirmation', 'approve-proposal', 'read-baseline', 'register-baseline', 'record-tdd', 'finish-step', 'finish-implementation', 'review', 'sync-review-card', 'update-task', 'adopt-protocol', 'bind-executor', 'repair', 'refine-steps', 'return-task')
     for action in actions:
@@ -248,7 +250,20 @@ def main(argv=None):
         confirmation = None
         from workflow_engine.engine import Engine
         root = Path(args.root).resolve()
-        database = Path(args.db).resolve() if args.db else default_db(root)
+        raw_database = Path(args.db) if args.db else default_db(root)
+        if args.action == 'list':
+            from session_binding import list_tasks
+            from workflow_engine.model import EngineError
+
+            try:
+                tasks = list_tasks(root, raw_database, active_only=args.active)
+            except ValueError as exc:
+                message = str(exc)
+                code = message.split('：', 1)[0] if '：' in message else 'BLOCKED'
+                raise EngineError(code, message) from exc
+            print(json.dumps({'ok': True, 'tasks': tasks}, ensure_ascii=False))
+            return 0
+        database = raw_database.resolve()
         if args.action == 'request-confirmation' and args.db and database != default_db(root).resolve():
             raise ArgumentError('聊天确认须与宿主使用同一默认状态库')
         if args.action in ('status', 'snapshot', 'history', 'progress', 'request-confirmation', 'begin') and not database.is_file():

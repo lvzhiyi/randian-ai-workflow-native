@@ -166,9 +166,11 @@ class CursorGateTests(unittest.TestCase):
             self.assertEqual(self.call(event)["permission"], "deny")
 
     def test_lifecycle_outputs(self):
-        result = self.call(dict(self.event(), hook_event_name="sessionStart"))
+        result = self.call(dict(self.event(), hook_event_name="sessionStart", tool_input=None))
         self.assertEqual(result["env"], {"WORKFLOW_HOST": "cursor"})
         self.assertIn("additional_context", result)
+        self.assertIn(str((SCRIPTS / "workflow_engine_cli.py").resolve()), result["additional_context"])
+        self.assertIn("prepare", result["additional_context"])
         result = self.call(dict(self.event("Task"), hook_event_name="subagentStart"))
         self.assertEqual(result["permission"], "allow")
         self.assertEqual(set(result), {"permission", "user_message"})
@@ -242,8 +244,8 @@ class CursorGateTests(unittest.TestCase):
             result = subprocess.run(cli, text=True, capture_output=True)
             return json.loads(result.stdout)
 
-        def reply(message, session="conv-1", event_name="beforeSubmitPrompt"):
-            return self.call(dict(self.event(conversation_id=session), hook_event_name=event_name, prompt=message))
+        def reply(message, session="conv-1", event_name="beforeSubmitPrompt", **extra):
+            return self.call(dict(self.event(conversation_id=session), hook_event_name=event_name, prompt=message, **extra))
 
         prepared = request(task, "tier_confirmation")
         self.assertTrue(prepared["ok"], prepared)
@@ -256,7 +258,7 @@ class CursorGateTests(unittest.TestCase):
         reply("选完整档")
         self.assertEqual(engine.status("T1")["version"], task["version"])
         self.assertTrue(request(task, "tier_confirmation")["ok"])
-        self.assertEqual(reply("选完整档"), {"continue": True})
+        self.assertEqual(reply("选完整档", tool_input=None), {"continue": True})
         selected = engine.status("T1")
         self.assertEqual(selected["tier"], "full")
         self.assertTrue({"approval", "proposal", "verify_config"} <= set(selected["missing"]))

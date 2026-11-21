@@ -676,5 +676,5 @@ def context(event):
         return message
     except Exception as exc:
         if "ENGINE_TASK_UNBOUND" in str(exc):
-            return "ENGINE_TASK_UNBOUND：只读调查无需任务；可调用 init / prd-breakdown 登记规划，或 dashboard 管理服务；产品实施需 create / bind-executor 并满足实施门槛。"
+            return "ENGINE_TASK_UNBOUND：只读调查无需任务；可调用 init / prd-breakdown 登记规划，或 dashboard 管理服务；产品实施须由 Agent 先 CLI list --active 查已有任务并 bind-executor，或用 prepare 建卡绑会话（可加 --request-tier 发起定档）并满足实施门槛，不要让用户外部手动绑定。"
         return str(exc) + "；请核对任务状态及绑定，规划使用独立 planning 入口。"
