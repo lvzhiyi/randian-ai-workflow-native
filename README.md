@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+ stdlib only](https://img.shields.io/badge/Dependencies-Python%203.9%2B%20stdlib%20only-brightgreen.svg)](#architecture)
 [![Hosts: Claude Code | Codex | Cursor](https://img.shields.io/badge/Hosts-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-purple.svg)](#installation)
-[![Release](https://img.shields.io/badge/workflow--core-v0.22.1-orange.svg)](docs/development/release-0.22.1.md)
+[![Release](https://img.shields.io/badge/workflow--core-v0.23.0-orange.svg)](docs/development/release-0.23.0.md)
 
 **Lock your specs before your agent writes a single line of code. Hard-enforced AI engineering workflow for Claude Code, Codex, and Cursor.**
 
@@ -33,7 +33,7 @@ SpecLock turns engineering discipline into **deterministic, auditable code-level
 
 [Superpowers](https://github.com/obra/superpowers) is an awesome prompt-based engineering methodology pack. **SpecLock is not a hostile replacement — it is a stronger governance layer designed for real team repositories**, and works great *alongside* Superpowers (in fact, our Flutter preset bundles `superpowers` directly).
 
-| Dimension | Superpowers (Prompt Methodology) | SpecLock (`v0.22.1`) |
+| Dimension | Superpowers (Prompt Methodology) | SpecLock (`v0.23.0`) |
 | --- | --- | --- |
 | **Enforcement Mechanism** | Soft prompt discipline — agents can drift, skip reading specs, or fake verification on long threads | **Hooks + SQLite State Machine + SHA-256 Receipts** — blocks writes until baselines are read, tier is confirmed, and real checks match the current snapshot |
 | **Risk Tiering & TDD** | Strict TDD everywhere (can feel rigid on UI, copy, or doc tasks) | **3 Risk Tiers (Light / Standard / Full)** + pragmatic TDD-first (opt-out requires recorded reason & alternative validation) |
@@ -142,6 +142,7 @@ Open your project, start a new session, trust hooks in `/hooks` (or **Settings �
 | Initialize `ai-workflow.yaml` & lean doc skeleton (`standards.md` ≤200 lines) | `/workflow-core:init` | `$workflow-core:init` |
 | Start or resume any task through the guarded workflow | `/workflow-core:workflow` | `$workflow-core:workflow` |
 | Break down a PRD into lean 7-field module task cards | `/workflow-core:prd-breakdown` | `$workflow-core:prd-breakdown` |
+| Narrow down complex multi-cause or cross-layer bugs | `/workflow-core:debug` | `$workflow-core:debug` |
 | Run Spec + Standards dual-axis review & auto-update task card | `/workflow-core:review` | `$workflow-core:review` |
 | Archive merged change folders & verify zero broken links | `/workflow-core:archive` | `$workflow-core:archive` |
 | Save or restore cross-session handoff snapshots | `/workflow-core:handoff` | `$workflow-core:handoff` |
@@ -163,7 +164,7 @@ python3 /path/to/your-repo/scripts/check_docs.py --root /path/to/your-repo --che
 
 | Plugin | Dimension | Status |
 | --- | --- | --- |
-| `workflow-core` | Core engine, hooks, skills, dashboard, metrics, archiving | Production (`v0.22.1`, stack-agnostic) |
+| `workflow-core` | Core engine, hooks, skills, dashboard, metrics, archiving | Production (`v0.23.0`, stack-agnostic) |
 | `stack-flutter` | Flutter checks, Stop hook analyzer, platform rules | Included |
 | `design-pixso` | Pixso MCP integration & visual node verification | Included |
 | `api-apifox` | Apifox contract queries & write-authorization guardrails | Included |
@@ -182,6 +183,7 @@ python3 /path/to/your-repo/scripts/check_docs.py --root /path/to/your-repo --che
 - [中文完整文档（Full Chinese Documentation）](README.zh-CN.md)
 - [Engine Protocol v2](docs/development/workflow-engine.md)
 - [Cursor Adapter Guide](docs/development/cursor-adapter.md)
+- [Release Notes: v0.23.0](docs/development/release-0.23.0.md)
 - [Release Notes: v0.22.1](docs/development/release-0.22.1.md)
 - [Release Notes: v0.22.0](docs/development/release-0.22.0.md)
 - [Release Notes: v0.21.0](docs/development/release-0.21.0.md)

@@ -398,6 +398,7 @@ flowchart LR
 | 不确定从哪开始 | `/workflow-core:workflow` |
 | 拿到一份 PRD | `/workflow-core:prd-breakdown` |
 | 判断档位 | `/workflow-core:tiering` |
+| 排查多原因或跨层复杂 Bug 根因 | `/workflow-core:debug` |
 | 交付前评审改动 | `/workflow-core:review` |
 | 查看流程度量报告 | `/workflow-core:metrics` |
 | 查看任务级只读看板 | `/workflow-core:dashboard`（默认查询，显式 `on` 开启服务） |
