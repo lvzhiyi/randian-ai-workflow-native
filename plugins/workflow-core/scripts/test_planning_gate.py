@@ -199,3 +199,9 @@ class PlanningGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.run_cli("close")
         self.assertIsNotNone(host_gate.pre_tool(self.event("Write", file_path="docs/product/项目首页.md")))
+
+    def test_init_allows_single_file_standards_skeleton(self):
+        self.run_cli("open", "--operation", "init", "--path", "docs/development/standards.md")
+        self.assertIsNone(host_gate.pre_tool(self.event("Write", file_path="docs/development/standards.md")))
+        self.assertIsNotNone(host_gate.pre_tool(self.event("Write", file_path="docs/development/random.md")))
+        self.run_cli("close")

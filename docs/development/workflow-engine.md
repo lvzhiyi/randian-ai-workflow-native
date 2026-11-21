@@ -20,7 +20,7 @@ CLI `create --details` 必填且必须为 JSON 对象（包括拒绝 null）；C
 
 所有修改方法前缀均为 `(task_id, expected_version, request_id, ...)`：
 
-- `create(task_id,tier,acceptance,plan,request_id,details=...)`：登记任务，不偷偷补齐目标和来源。任务字段 `goal/scope/acceptance/source/dependencies` 缺失呈现 missing；依赖是 `{id,status:"done"}` 列表，空列表表示无依赖，未完成依赖阻止开始。
+- `create(task_id,tier,acceptance,plan,request_id,details=...)`：登记任务，不偷偷补齐目标和来源。任务字段 `goal/scope/acceptance/source/dependencies` 缺失呈现 missing。依赖使用 `{id,status}`，空列表表示无依赖。会阻止实施的待确认项按原问题编号登记为 `pending`；状态为 `done` 后才满足该依赖。Agent 按 [开工检查](../../plugins/workflow-core/skills/kickoff/SKILL.md#待确认项的追问与恢复) 向用户追问，并在取得结论后用 `update-task` 更新原依赖。
 - `confirm_tier(..., actor, selected_tier=None)`：确认当前档位，或在待定档轮次内原子地记录用户选中的档位。选中档位需要不同的步骤、方案或验证计划时，保留选择并报告待补项。
 - `request-confirmation`：由 Agent 为当前任务、轮次、版本及绑定会话准备聊天确认。命令仅登记请求。宿主通过用户消息钩子处理档位回复或完整档的单独方案批准。
 - `approve_proposal(..., actor, control_digest)`：完整档专用批准。方案必需 goal、scope、impact、risk、rollback、acceptance，以及任务结构化 steps；批准绑定当前轮次和控制摘要。标准档 3–5 步短计划无需方案审批，轻量至少一项必要实施记录。

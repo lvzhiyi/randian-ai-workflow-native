@@ -12,6 +12,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from workflow_engine import Engine, EngineError
 
 
+def prepare_start(test, task):
+    task = test.call('confirm_tier', task, '人工操作者')
+    if task['tier'] == 'full':
+        task = test.call('approve_proposal', task, '人工操作者', task['control_digest'])
+    task = test.call('bind_executor', task, 'reader-1', 'session-1')
+    data = (test.root / 'baseline.md').read_bytes()
+    return test.call('register_baseline', task, {'path': 'baseline.md', 'sha256': hashlib.sha256(data).hexdigest(), 'bytes_read': len(data), 'complete': True, 'executor': 'reader-1', 'session_id': 'session-1', 'round_id': task['current_round']})
+
+
 class ProtocolTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -37,14 +46,7 @@ class ProtocolTests(unittest.TestCase):
         return self.e.create('t', tier, ['A1'], plan, 'create', details=details)
 
     def ready(self, tier='light', code='pass'):
-        task = self.create(tier, code)
-        task = self.call('confirm_tier', task, '人工操作者')
-        if tier == 'full':
-            task = self.call('approve_proposal', task, '人工操作者', task['control_digest'])
-        task = self.call('bind_executor', task, 'reader-1', 'session-1')
-        data = (self.root / 'baseline.md').read_bytes()
-        task = self.call('register_baseline', task, {'path': 'baseline.md', 'sha256': hashlib.sha256(data).hexdigest(), 'bytes_read': len(data), 'complete': True, 'executor': 'reader-1', 'session_id': 'session-1', 'round_id': task['current_round']})
-        return self.call('start', task)
+        return self.call('start', prepare_start(self, self.create(tier, code)))
 
     def implemented(self, tier='light', code='pass'):
         task = self.ready(tier, code)
@@ -150,10 +152,26 @@ class ProtocolTests(unittest.TestCase):
 
     def test_dependency_incomplete_blocks_and_explicit_resume(self):
         task = self.create()
-        task = self.call('update_task', task, {'dependencies': [{'id': 'upstream', 'status': 'pending'}]})
+        question = {'id': 'Q01', 'status': 'pending'}
+        upstream = {'id': 'upstream', 'status': 'done'}
+        task = self.call('update_task', task, {'dependencies': [upstream, question]})
+        task = prepare_start(self, task)
         self.assertIn('dependencies', task['missing'])
-        task = self.call('update_task', task, {'dependencies': [{'id': 'upstream', 'status': 'done'}]})
-        self.assertNotIn('dependencies', task['missing'])
+        with self.assertRaisesRegex(EngineError, '就绪条件缺失：dependencies$'):
+            self.call('start', task)
+        waiting = self.e.status('t')
+        self.assertEqual(waiting['version'], task['version'])
+        self.assertEqual(waiting['state'], 'created')
+
+        # 收到结论后保留原问题 ID，复核因控制摘要变化而失效的证据。
+        decided = self.call('update_task', waiting, {'dependencies': [upstream, dict(question, status='done')]})
+        self.assertNotIn('dependencies', decided['missing'])
+        with self.assertRaises(EngineError):
+            self.call('start', decided)
+        started = self.call('start', prepare_start(self, decided))
+        self.assertEqual(started['state'], 'implementing')
+        self.assertEqual(started['current_round'], waiting['current_round'])
+        self.assertEqual(started['rounds'][-1]['session_id'], waiting['rounds'][-1]['session_id'])
 
     def test_baseline_changed_invalidates_terminal_and_truncated_receipt(self):
         task = self.implemented()

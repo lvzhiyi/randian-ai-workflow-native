@@ -185,6 +185,105 @@ class CliTests(unittest.TestCase):
         self.assertEqual(valid_paths, paths[:2])
         self.assertIn('baseline', refreshed['missing'])
 
+    def test_prepare_and_begin_streamlined_lifecycle_preserves_all_gates(self):
+        sys.path.insert(0, str(CLI.parent))
+        from workflow_engine import Engine
+
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            root = base / 'repo'
+            root.mkdir()
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            (root / 'rules.md').write_text('核心工程规范全文', encoding='utf-8')
+            (root / 'ai-workflow.yaml').write_text(
+                'version: 1\n'
+                'baseline:\n'
+                '  required:\n'
+                '    - rules.md\n'
+                'verify:\n'
+                f'  light: {sys.executable} -c pass\n',
+                encoding='utf-8',
+            )
+            db = base / 'state.sqlite'
+
+            def run_cli(action, *args):
+                proc = subprocess.run(
+                    [sys.executable, str(CLI), '--root', str(root), '--db', str(db), action, '--task', 't1', *args],
+                    capture_output=True, text=True,
+                    env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
+                )
+                return proc.returncode, json.loads(proc.stdout)
+
+            # 1. prepare：自动从 ai-workflow.yaml 派生 baseline 和 plan，省略 --request，绑定会话
+            details = {'goal': '修复问题', 'scope': ['src'], 'source': '需求', 'dependencies': [], 'steps': [{'id': 's1', 'title': '实现'}]}
+            code, prep = run_cli(
+                'prepare', '--tier', '轻量', '--acceptance', 'A1',
+                '--details-json', json.dumps(details),
+                '--executor', 'agent', '--session', 'sess-1',
+            )
+            self.assertEqual(code, 0, prep)
+            self.assertEqual(prep['task']['baseline'], ['rules.md'])
+            self.assertEqual(prep['task']['rounds'][-1]['executor'], 'agent')
+            self.assertEqual(prep['task']['rounds'][-1]['session_id'], 'sess-1')
+            self.assertIn('progress', prep)
+
+            # 2. 未人工定档前，begin 必须被硬门禁拒绝，不写入任何基线回执
+            code, blocked = run_cli('begin', '--executor', 'agent', '--session', 'sess-1')
+            self.assertEqual((code, blocked['code']), (2, 'NOT_READY'))
+            self.assertEqual(Engine(root, db).status('t1')['version'], prep['task']['version'])
+
+            # 人工定档
+            engine = Engine(root, db)
+            confirmed = engine.confirm_tier('t1', prep['task']['version'], 'human-tier', '用户')
+
+            # 3. 基线超限时 begin 必须拒绝，不登记回执、不进入 implementing
+            code, truncated = run_cli('begin', '--executor', 'agent', '--session', 'sess-1', '--max-bytes', '20')
+            self.assertEqual((code, truncated['code']), (2, 'BASELINE_BATCH_LIMIT'))
+            self.assertEqual(engine.status('t1')['state'], 'created')
+
+            # 4. 正常 begin：一步吐出基线正文 + 登记 SHA-256 回执 + start + record-tdd + 返回 progress
+            tdd = {'adopted': False, 'reason': '小修正', 'alternative_validation': '运行检查'}
+            code, begun = run_cli(
+                'begin', '--version', str(confirmed['version']),
+                '--executor', 'agent', '--session', 'sess-1',
+                '--tdd-json', json.dumps(tdd),
+            )
+            self.assertEqual(code, 0, begun)
+            self.assertEqual(begun['task']['state'], 'implementing')
+            self.assertEqual(begun['documents'][0]['path'], 'rules.md')
+            self.assertEqual(begun['documents'][0]['content'], '核心工程规范全文')
+            self.assertIn('progress', begun)
+
+            # 5. finish-step --finish-implementation 一步收口进入 pending_verification
+            code, finished = run_cli(
+                'finish-step', '--version', str(begun['version']),
+                '--step', 's1', '--summary', '已完成实现', '--finish-implementation',
+            )
+            self.assertEqual(code, 0, finished)
+            self.assertEqual(finished['task']['state'], 'pending_verification')
+            self.assertIn('progress', finished)
+
+            # 6. run + review（省略 --request，均自带 progress 投影）
+            code, verified = run_cli('run', '--version', str(finished['task']['version']))
+            self.assertEqual(code, 0, verified)
+            self.assertEqual(verified['task']['state'], 'passed')
+            self.assertIn('progress', verified)
+
+            report = {
+                'snapshot': verified['task']['snapshot'],
+                'control_digest': verified['task']['control_digest'],
+                'round_id': verified['task']['current_round'],
+                'executor': 'reviewer',
+                'axes': {axis: {'conclusion': 'pass', 'findings': []} for axis in ('spec', 'standards')},
+            }
+            code, reviewed = run_cli(
+                'review', '--version', str(verified['task']['version']),
+                '--file-json', json.dumps(report),
+            )
+            self.assertEqual(code, 0, reviewed)
+            self.assertEqual(reviewed['task']['state'], 'review_passed')
+            self.assertIn('progress', reviewed)
+
 
 if __name__ == "__main__":
     unittest.main()

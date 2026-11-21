@@ -310,3 +310,26 @@ class HostGateTests(unittest.TestCase):
     def test_native_confirmation_has_no_unverified_auto_approval(self):
         with patch.object(host_gate, "load_task", side_effect=AssertionError("不能批准")):
             self.assertIsNone(host_gate.post_tool(self.event("AskUserQuestion")))
+
+    def test_archive_command_allowlist_and_boundaries(self):
+        script = Path(host_gate.__file__).with_name("archive_change.py").absolute()
+        base = f"python3 {script}"
+        allowed = (
+            f"{base} --help",
+            f"{base} --root {self.root} --task T1 --dry-run",
+            f"WORKFLOW_HOST=cursor {base} --root {self.root} --task T1 --task T2 --changes-dir openspec/changes --month 2026-11",
+        )
+        for cmd in allowed:
+            with self.subTest(allowed=cmd), patch.object(host_gate, "load_task", side_effect=ValueError("unbound")):
+                self.assertIsNone(host_gate.pre_tool(self.event("Bash", command=cmd)))
+        rejected = (
+            f"{base} --root /tmp --task T1",
+            f"{base} --root {self.root}",
+            f"{base} --root {self.root} --task T1 --month bad",
+            f"{base} --root {self.root} --task T1 --evil x",
+            f"{base} --root {self.root} --task T1 && touch x",
+            f"python3 /tmp/archive_change.py --root {self.root} --task T1",
+        )
+        for cmd in rejected:
+            with self.subTest(rejected=cmd), patch.object(host_gate, "load_task", side_effect=ValueError("unbound")):
+                self.assertIsNotNone(host_gate.pre_tool(self.event("Bash", command=cmd)))

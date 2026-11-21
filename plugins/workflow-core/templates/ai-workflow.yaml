@@ -14,7 +14,7 @@ version: 1
 # 工作流门禁始终启用；不再提供 engine.enabled 开关。
 # 插件门禁约束受支持工具与状态转移，不是防篡改安全沙箱。
 baseline:
-  required:                                # 实施前必须完整读取的项目内规范
+  required:                                # 实施前必须完整读取的项目内规范（精简模式可仅写 docs/development/standards.md）
     - docs/development/architecture.md
     - docs/development/coding.md
   # 按任务范围追加时可增加 scoped 字符串列表，格式：路径模式 => 文档相对路径。
@@ -37,7 +37,7 @@ review:
   base_branch: main                        # 功能分支实际合入的分支，如 develop 或 main
 
 verify:
-  docs: <文档检查命令>
+  docs: <文档检查命令，推荐自包含：python3 scripts/check_docs.py --root .>
   light: <定向测试 + 静态分析命令>
   standard: <完整检查命令>
   full:                                    # 多条命令按顺序执行

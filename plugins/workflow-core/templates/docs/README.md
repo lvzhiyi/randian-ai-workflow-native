@@ -9,7 +9,8 @@
 | 模板 | 生成时机 |
 | --- | --- |
 | `product/项目首页.md`、`product/需求/需求说明.md`、`product/任务/版本任务总览.md` | init |
-| `development/coding.md`、`architecture.md`、`testing.md` | init |
+| `development/standards.md`（精简三合一基线，推荐中小项目） | init（精简模式，替代下方 coding/architecture/testing 三份） |
+| `development/coding.md`、`architecture.md`、`testing.md` | init（拆分模式，大型项目按职责分文件） |
 | `product/设计/设计索引.md` | init，项目有设计工具时 |
 | `product/术语表.md` | init（只建骨架，不预填词条） |
 | `development/ui.md` | init，项目有界面时 |

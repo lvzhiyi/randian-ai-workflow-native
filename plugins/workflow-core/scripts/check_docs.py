@@ -25,12 +25,25 @@ DEFAULT_CARD_ID = r'[A-Z][A-Z0-9]*-R\d+'
 CARD_REQUIRED = {
     '完成勾选框': re.compile(r'^- \[[ xX]\] ', re.M),
     '来源': re.compile(r'^- 来源[：:]', re.M),
-    '负责人': re.compile(r'负责人'),
     '验收': re.compile(r'^- 验收[：:]', re.M),
 }
 
+# 勾选状态与协作状态字段提取（兼容独立“协作状态：”与旧式组合“协作状态 / ...：”首段）。
+CARD_CHECKED = re.compile(r'^- \[[xX]\] ', re.M)
+CARD_STATUS = re.compile(
+    r'^- (?:(?:协作状态|状态)(?:[ \t]*/[^：:\n]+)?[：:]|\*\*(?:协作状态|状态)\*\*[：:]|\*\*(?:协作状态|状态)[：:]\*\*)[ \t]*(.*?)'
+    r'[ \t]*(?:[；;/].*|<!--.*)?$',
+    re.M,
+)
+
+# 命中以下非终态关键词时，不得同时勾选 [x]。
+NON_TERMINAL_STATUS_KEYWORDS = (
+    '待处理', '待确认', '待验证', '待评审', '待人工验收', '待开发', '待实施',
+    '未开始', '研发中', '实施中', '进行中', '评审未通过', '受阻', '阻塞', '已暂停', '已取消',
+)
+
 # 结构化「待确认」记录（含全角竖线「｜」）必须包含的段落。
-PENDING_KEYS = ('影响：', '负责人：', '恢复条件：', '来源：')
+PENDING_KEYS = ('影响：', '恢复条件：')
 
 def resolve_paths(root, args, config):
     """合并命令行参数、项目配置和默认值，得到本次检查使用的目录。
@@ -112,11 +125,11 @@ def check_links(root, paths):
 
 
 def check_cards(root, cards_dir, card_id=DEFAULT_CARD_ID):
-    """检查模块卡子需求的必填字段与结构化「待确认」格式。
+    """检查模块卡子需求的必填字段、勾选与状态一致性及结构化「待确认」格式。
 
     参数 [root]：项目根；[cards_dir]：任务卡目录；[card_id]：子需求编号正则。
     返回：错误描述列表。子需求小节从其 ### 标题到下一个子需求标题或二级标题为止。
-    不含「｜」的旧式自由文本「待确认：」不报错，随卡片修改迁移到新格式。
+    不含「｜」的自由文本「待确认：」不报错；勾选 [x] 时若协作状态仍为非终态则报错。
     """
     errors = []
     heading = re.compile(rf'^###\s+({card_id})\b.*$', re.M)
@@ -127,13 +140,22 @@ def check_cards(root, cards_dir, card_id=DEFAULT_CARD_ID):
         for index, match in enumerate(matches):
             end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
             section = re.split(r'^## ', content[match.end():end], maxsplit=1, flags=re.M)[0]
+            cid = match.group(1)
             for field, pattern in CARD_REQUIRED.items():
                 if not pattern.search(section):
-                    errors.append(f'{rel}: {match.group(1)} 缺少字段「{field}」')
-            for line in re.findall(r'^- 待确认：.*｜.*$', section, re.M):
+                    errors.append(f'{rel}: {cid} 缺少字段「{field}」')
+            if CARD_CHECKED.search(section):
+                status_match = CARD_STATUS.search(section)
+                if status_match:
+                    status_value = status_match.group(1).strip()
+                    if any(keyword in status_value for keyword in NON_TERMINAL_STATUS_KEYWORDS):
+                        errors.append(
+                            f'{rel}: {cid} 完成勾选框已勾选，但协作状态仍为非终态「{status_value}」'
+                        )
+            for line in re.findall(r'^- 待确认[：:].*｜.*$', section, re.M):
                 missing = [key for key in PENDING_KEYS if key not in line]
                 if missing:
-                    errors.append(f'{rel}: {match.group(1)} 待确认记录缺少 {"/".join(missing)}')
+                    errors.append(f'{rel}: {cid} 待确认记录缺少 {"/".join(missing)}')
     return errors
 
 

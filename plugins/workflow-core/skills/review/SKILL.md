@@ -23,11 +23,7 @@ description: 所有档位的 Agent Spec + Standards 双轴评审。验证通过�
 {"round_id":"当前轮次","control_digest":"控制摘要","snapshot":"验证快照","executor":"实际执行者","axes":{"spec":{"conclusion":"pass","findings":[]},"standards":{"conclusion":"pass","findings":[]}}}
 ```
 
-提交评审报告后，无论成功或失败，都按 `workflow` 调用只读 `progress --task` 并同步宿主清单与真实阶段。review_failed 显示暂停/待修复，不把实施项虚标运行中；原范围 repair 后重读当前轮次新增 todo，成功 finish-step 后再同步完成。评审是独立阶段，不因实施清单全 completed 提前宣称通过。工具不可用则给简短聊天清单，不从 UI 回写引擎。
-
-有任务卡绑定时，`review` 在两轴通过后自动回写协作状态，`card_sync=synced` 表示已确认落盘。回写待恢复时，使用原版本、报告和请求 ID 重试。已有有效评审但缺回写时，可用 `sync-review-card` 指定当前轮次以及已核实的卡路径和标题 ID。人工验收和交付仍由实际确认记录。
-
-原生清单遵守 `workflow` 的“安全同步与聊天降级”：按真实 schema 核实数量、必填参数和已有列表可见性；单项、空清单、不能安全清理旧项或工具拒绝时使用简短聊天清单，不凑假 todo、不覆盖未知列表、不声称已原生同步。CLI 只是投影，由 Agent 显式调用宿主工具，不提供自动 UI bridge。
+提交评审报告后按 `workflow` 调用只读 `progress --task` 并遵守安全同步规则（无法同步时用简短聊天清单）。有任务卡绑定时，`review` 在两轴通过后自动回写协作状态为「评审通过，待人工验收」（若卡片已被误勾 `[x]` 将拒写报错）；回写待恢复时使用原版本与请求 ID 重试，缺回写时用 `sync-review-card` 补录。
 
 ## 结论与交接
 

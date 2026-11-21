@@ -268,3 +268,12 @@ class ReviewCardTests(unittest.TestCase):
         self.assertEqual((code, result['code']), (2, 'CARD_INVALID'))
         self.assertEqual(self.card.read_bytes(), original)
         self.assertEqual(self.engine.status('t')['state'], 'passed')
+
+    def test_checked_card_is_rejected_without_writing(self):
+        original = ORIGINAL.replace('- [ ] ', '- [x] ', 1).encode()
+        self.card.write_bytes(original)
+        task = self.verified()
+        code, result = self.review(task)
+        self.assertEqual((code, result['code']), (2, 'CARD_CONFLICT'))
+        self.assertEqual(self.card.read_bytes(), original)
+        self.assertEqual(self.engine.status('t')['state'], 'passed')

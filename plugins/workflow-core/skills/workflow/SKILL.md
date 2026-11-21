@@ -21,6 +21,8 @@ Cursor 在 Agent 聊天里收集档位和方案批准，见下方「在 Agent �
 
 ## 任务路径
 
+收到「执行/继续某个任务」时，先定位任务并核对当前阶段。待实施和待确认都进入 `kickoff`；已在实施、验证或评审阶段的任务按当前轮次和有效证据继续。仍需用户决定的关键缺项由 Agent 主动提问，收到答复后在同一会话复核并推进。
+
 1. **需求接收与拆解**（`prd-breakdown`）：同一入口接收来源、澄清目标、范围、验收与依赖；小任务原位简记，不强制 PRD。
 2. **任务就绪检查**（`kickoff`、`tiering`）：三档均由人工确认档位及实施范围；标准原位 3～5 步短计划无需额外方案审批；完整方案另行批准。未就绪可调查，不可实施。
 3. **实施**（`implement`）：成功完整读取适用基线后，按结构化 todos 推进；TDD 优先非强制，不采用记录原因与替代验证。
@@ -44,7 +46,12 @@ CLI 位于 `${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py`，先查实际
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根" --db "项目根外的状态库" status --task "任务ID"
 ```
 
-继续与总结前读 `status`，必要时读 `snapshot` / `history`。修改使用最新整数 `version` 和唯一 `request`，绑定任务、当前轮次、尝试和证据；不编造通过命令、不手改数据库绕门禁。每轮明确主执行者，获授权的协作者继承同轮授权并以版本检查更新。脚本缺失、协议不兼容或宿主能力不足须报告，不能静默降级。宿主根据当前 session 的唯一轮次绑定查找任务，不要求在子 shell 中 export 后修改父进程环境。多任务冲突时显式指定任务并重新绑定；不得猜测当前任务。首次创建可用 `--plan-json` / `--details-json`，报告和修复输入可用 `--file-json`，无需实施前先写 JSON 文件。
+继续与总结前读 `status`，必要时读 `snapshot` / `history`。日常新任务优先使用精简复合入口以减少 CLI 往返（底层门禁与原细粒度命令完全等价）：
+- `prepare`：一步创建 v2 任务（可省略 `--plan` 与 `details.baseline`，自动从 `ai-workflow.yaml` 派生）、绑定会话（`--executor` / `--session`）并可选 `--request-tier` 发起聊天定档；
+- `begin`：人工定档（及完整档批准）落库后，一步核对就绪前置、按 `--max-bytes` 批量输出全部必读基线正文并登记 SHA-256 回执、`start` 开工并可选 `--tdd-json` 记录 TDD 决策；超限时仍报 `BASELINE_BATCH_LIMIT`，回退 `read-baseline --path` 分批；
+- 写操作（`prepare` / `begin` / `finish-step` / `run` / `review` 等）支持省略 `--request`（自动生成 UUID；显式重试/回写恢复仍传原 `--request`），响应内联 `progress` 投影，无需再单独调用 `progress --task`；末步 `finish-step` 支持 `--finish-implementation` 一步进入待验证。
+
+修改使用最新整数 `version`，绑定任务、当前轮次、尝试和证据；不编造通过命令、不手改数据库绕门禁。每轮明确主执行者，获授权的协作者继承同轮授权并以版本检查更新。脚本缺失、协议不兼容或宿主能力不足须报告，不能静默降级。宿主根据当前 session 的唯一轮次绑定查找任务，不要求在子 shell 中 export 后修改父进程环境。多任务冲突时显式指定任务并重新绑定；不得猜测当前任务。首次创建可用 `--plan-json` / `--details-json`，报告和修复输入可用 `--file-json`，无需实施前先写 JSON 文件。
 
 ### 在 Agent 窗口定档
 

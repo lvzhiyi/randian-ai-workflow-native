@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location('check_docs', Path(__file__).with_
 check_docs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check_docs)
 
-COMPLETE = ('### DEMO-R01 示例\n\n- [ ] 子需求完成\n- 负责人：待指定\n'
+COMPLETE = ('### DEMO-R01 示例\n\n- [ ] 子需求完成\n- 协作状态：待处理\n'
             '- 来源：需求说明第 1 节\n- 验收：示例\n')
 
 
@@ -48,17 +48,35 @@ class CardTests(ProjectTestCase):
 
     def test_missing_fields_are_reported(self):
         errors = self.cards('### DEMO-R01 示例\n\n- 目标：示例\n')
-        self.assertEqual(len(errors), 4)
+        self.assertEqual(len(errors), 3)
         self.assertTrue(all('DEMO-R01 缺少字段' in error for error in errors))
 
     def test_next_chapter_is_not_counted_as_card_field(self):
         errors = self.cards('### DEMO-R01 示例\n\n## 4. 其他\n\n' + COMPLETE.split('\n', 2)[2])
-        self.assertEqual(len(errors), 4)
+        self.assertEqual(len(errors), 3)
 
-    def test_structured_pending_item_requires_all_keys(self):
-        errors = self.cards(COMPLETE + '- 待确认：缺设计｜影响：R01｜负责人：待指定\n')
+    def test_structured_pending_item_requires_core_keys(self):
+        errors = self.cards(COMPLETE + '- 待确认：缺设计｜影响：R01\n')
         self.assertEqual(len(errors), 1)
-        self.assertIn('恢复条件：/来源：', errors[0])
+        self.assertIn('恢复条件：', errors[0])
+        self.assertEqual(self.cards(COMPLETE + '- 待确认：缺设计｜影响：R01｜恢复条件：补齐主稿\n'), [])
+
+    def test_checked_box_conflicts_with_non_terminal_status(self):
+        for status in ('待确认', '待验证', '实施中', '评审通过，待人工验收', '已取消'):
+            card = COMPLETE.replace('- [ ] ', '- [x] ').replace('待处理', status)
+            errors = self.cards(card)
+            self.assertEqual(len(errors), 1, status)
+            self.assertIn('完成勾选框已勾选，但协作状态仍为非终态', errors[0])
+        combined = ('### DEMO-R02 组合栏\n\n- [x] 子需求完成\n'
+                    '- 协作状态 / 优先级：待确认 / P0\n- 来源：需求\n- 验收：通过\n')
+        errors = self.cards(combined)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('非终态「待确认」', errors[0])
+
+    def test_checked_box_allows_terminal_status(self):
+        for status in ('已完成', '人工验收通过', '已交付'):
+            card = COMPLETE.replace('- [ ] ', '- [x] ').replace('待处理', status)
+            self.assertEqual(self.cards(card), [], status)
 
     def test_legacy_free_text_pending_item_is_tolerated(self):
         self.assertEqual(self.cards(COMPLETE + '- 待确认：是否记住上次 Tab。\n'), [])

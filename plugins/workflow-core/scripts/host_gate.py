@@ -176,6 +176,41 @@ def dashboard_command(command):
     return command_options(fixed_command(command, "dashboard_server.py"), {"on", "off", "status"}, {"--root", "--task"}) is not None
 
 
+def archive_command(command, event):
+    """归档已完成变更的固定入口，严格限定当前项目根与白名单选项。"""
+    args = fixed_command(command, "archive_change.py")
+    if args is None:
+        return False
+    if args in (["--help"], ["-h"]):
+        return True
+    root = project_root(event.get("cwd"))
+    if root is None:
+        return False
+    values, flags, index = {}, set(), 0
+    while index < len(args):
+        token = args[index]
+        if token in {"--dry-run", "--skip-check"}:
+            if token in flags:
+                return False
+            flags.add(token)
+            index += 1
+        elif token in {"--root", "--task", "--changes-dir", "--month"} and index + 1 < len(args):
+            value = args[index + 1]
+            if not value or value.startswith("-") or token in values and token != "--task":
+                return False
+            values.setdefault(token, []).append(value)
+            index += 2
+        else:
+            return False
+    if "--root" not in values or not values.get("--task"):
+        return False
+    raw_root = values["--root"][0]
+    target_root = Path(raw_root if Path(raw_root).is_absolute() else Path(event.get("cwd") or ".") / raw_root).resolve()
+    if target_root != root:
+        return False
+    return "--month" not in values or bool(re.fullmatch(r"\d{4}-\d{2}", values["--month"][0]))
+
+
 def planning_command(command, event):
     """仅当前项目和宿主会话可登记；不将登记视为真人身份认证。"""
     args = fixed_command(command, "workflow_planning_cli.py")
@@ -528,7 +563,7 @@ def pre_tool(event):
     if tool in READ_TOOLS or tool in set(filter(None, os.environ.get("WORKFLOW_READONLY_MCP_TOOLS", "").split(","))):
         return None
     data = event.get("tool_input") or {}
-    if tool in SHELL_TOOLS and (readonly_shell(shell_command(data)) or engine_command(shell_command(data)) or dashboard_command(shell_command(data)) or planning_command(shell_command(data), event) or init_read_command(shell_command(data), event)):
+    if tool in SHELL_TOOLS and (readonly_shell(shell_command(data)) or engine_command(shell_command(data)) or dashboard_command(shell_command(data)) or archive_command(shell_command(data), event) or planning_command(shell_command(data), event) or init_read_command(shell_command(data), event)):
         return None
     try:
         paths = targets(event, root)

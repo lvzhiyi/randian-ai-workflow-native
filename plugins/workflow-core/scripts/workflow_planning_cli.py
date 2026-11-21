@@ -89,7 +89,7 @@ def legal_target(root, operation, value, config):
         return path
     if operation == "init":
         dev = safe_path(root, doc("dev_docs"))
-        if path in {dev + "/" + name + ".md" for name in ("coding", "architecture", "testing", "ui", "api-integration")}:
+        if path in {dev + "/" + name + ".md" for name in ("standards", "coding", "architecture", "testing", "ui", "api-integration")}:
             return path
     raise ValueError("目标不属于本操作的规划文档：" + path)
 

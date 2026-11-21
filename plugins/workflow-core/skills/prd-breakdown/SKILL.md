@@ -19,22 +19,14 @@ description: PRD 需求接收、同步与拆解。用户提供 PRD/需求文档/
 
 ## 会话级规划登记（写入前必做）
 
-用户选择本技能即授权本轮相应规划产物，不需要创建假实施任务或确认实施档位。原生钩子不能自动观察技能调用；必须由技能显式调用下面的固定绝对脚本登记。先列清本轮精确文件清单，不能登记整个目录或通配符。`${SESSION}` 取当前宿主真实会话：Cursor 的 `conversation_id`，Codex 的 session/thread 标识（`CODEX_THREAD_ID` 可用时使用），Claude 的 `session_id`；取不到就报告缺项，不编造，不使用 Serena 会话 ID。
+按 `workflow` 的「规划与实施分界」，写入规划文档前用真实宿主会话显式 `open` 精确文件清单（仅限配置文档角色及 `docs.cards_dir` 下的直接模块卡），仅通过原生 Write / Edit / apply_patch 写入，收尾、取消或交接前务必 `close`：
 
 ```bash
 WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" open --root "项目绝对根" --session "${SESSION}" --operation prd-breakdown --path "精确目标.md" --ttl 1800
-WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" status --root "项目绝对根" --session "${SESSION}"
-```
-
-`HOST` 换为 `cursor` / `codex` / `claude`，脚本路径必须代入实际插件绝对路径。每个目标重复 `--path`；登记会替换本会话当前清单，最长 3600 秒。只登记本轮确需修改的文件：配置中的首页、需求、总览、术语、设计索引，以及 `prd-breakdown` 的 `docs.cards_dir` 下直接模块卡。`docs.product_root` 决定未单独配置角色的默认位置。README 只作为本轮明确列出的入口文件，不自动开放任意 README 或 `docs/*.md`。模板源码和产品代码不属于规划授权。
-
-登记后仅通过 Write / Edit / apply_patch 写入，补丁全部目标必须命中清单；不要用 Shell 重定向、脚本文件写入或 MCP 混写。收尾、取消或交接前运行（失败也报告，不静默遗留授权）：
-
-```bash
 WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" close --root "项目绝对根" --session "${SESSION}"
 ```
 
-登记与开闭审计保存在引擎外置状态目录，绑定项目、会话、操作及精确路径，过期或关闭后失效。它是用户所选技能的流程防护栏，不是可信身份认证或安全沙箱，也不授权产品实施。
+`HOST` 取 `cursor` / `codex` / `claude`，`${SESSION}` 取宿主真实会话 ID（取不到即报告缺项、不编造）。模板源码与产品代码不属于规划授权。
 
 ## 1. 先明确授权
 
@@ -73,17 +65,16 @@ WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.
 
 ## 5. 子需求拆分
 
-按**可独立验收的业务结果**拆分，不只按页面或“前端/后端/测试”拆。每项写明（字段模板见 `${CLAUDE_PLUGIN_ROOT}/templates/task-card.md`）：
+按**可独立验收的业务结果**拆分，不只按页面或“前端/后端/测试”拆。模块卡只保留业务核心字段（模板见 `${CLAUDE_PLUGIN_ROOT}/templates/task-card.md`），**不把引擎状态或 Git 历史复制到 Markdown**：
 
-- 稳定任务 ID、标题、目标、首期/延期、优先级、Agent 状态与独立的人工验收/交付状态
-- 当前执行轮次、主执行者、会话/来源链接、阶段尝试与版本绑定证据引用；新任务登记 v2，旧任务仅显式 `adopt-protocol`，不自动继承旧证据
-- 原文版本与章节、本地需求链接、相关设计与规范链接
-- 当前实现与差距、范围与非目标、接口/数据/其他卡依赖
-- 验收场景：成功、空状态、业务拒绝、边界、异常、恢复、适用平台
-- 待确认问题、负责人或待指定、阻塞范围与恢复条件
-- 关联技术变更/Issue 与验证记录；未建立写“未建立”，不放假链接
+- 稳定编号与标题（`### <模块>-R<编号> <标题>`）、完成勾选框与独立 `协作状态`
+- 来源（需求原文版本/章节、本地需求或设计节点链接）
+- 范围与非目标（含当前差距）
+- 验收场景（成功、空状态、业务拒绝、边界、异常、恢复、适用平台）
+- 依赖与待确认（阻塞缺项及恢复条件；无则写“无”，不填无意义的“负责人：待指定”）
+- 关联变更 / 人工确认（可选，指向 `docs/development/changes/<task-id>/` 或实际人工验收结论）
 
-同一业务能力只选一个归属卡，其他卡引用。在总览或卡内维护简短对照：来源章节 → 本地需求章节 → 任务编号 → 规范/设计 → 差异/核对状态。
+执行轮次、基线回执、TDD 决策、验证/评审尝试由工作流引擎维护，状态流水由 Git Commit Log 承载。同一业务能力只选一个归属卡，其他卡引用。
 
 ## 6. UI 关联与整页交付
 
@@ -112,10 +103,10 @@ WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.
 | 关键业务规则、接口或批准缺失 | 业务问题登记到需求说明「待确认问题」，接口问题登记到变更或卡 | 只暂停依赖部分 |
 | 文档、源码、状态、证据不一致 | 保留差异，核对版本，必要时重跑最小验证 | 不受影响部分 |
 
-模块卡中的缺项统一格式：
+模块卡中的缺项支持简洁自由文本，或结构化格式（含全角 `｜` 时至少写明影响与恢复条件）：
 
 ```text
-- 待确认：<具体缺项或冲突>｜影响：<阻塞的子需求/步骤>｜负责人：<姓名或待指定>｜恢复条件：<取得什么后继续>｜来源：<问题编号、设计小节或变更链接>
+- 待确认：<具体缺项或冲突>｜影响：<阻塞的子需求/步骤>｜恢复条件：<取得什么后继续>
 ```
 
 ## 8. 变更同步与状态

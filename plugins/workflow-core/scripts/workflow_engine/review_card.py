@@ -24,6 +24,7 @@ FIELD = re.compile(
     rf'^- (?:{LABEL}[：:]|\*\*{LABEL}\*\*[：:]|\*\*{LABEL}[：:]\*\*)[ \t]*(.*?)'
     r'[ \t]*(?:(?:[；;][ \t]*(?:\*\*)?[\w /、-]+(?:\*\*)?[：:]|<!--).*)?$'
 )
+CHECKED_BOX = re.compile(r'^- \[[xX]\] ')
 
 
 def validate_binding(root, binding):
@@ -49,6 +50,7 @@ def replace_status(data, card_id):
         raise EngineError('CARD_INVALID', '任务卡须使用 UTF-8') from error
     sections = 0
     fields = []
+    checked = False
     selected = False
     fence = None
     comment = False
@@ -74,11 +76,15 @@ def replace_status(data, card_id):
         if heading:
             selected = heading.groups() == ('###', card_id)
             sections += selected
+        if selected and CHECKED_BOX.match(body):
+            checked = True
         field = FIELD.match(body) if selected else None
         if field:
             fields.append((index, field.start(1), field.end(1)))
     if sections != 1 or len(fields) != 1:
         raise EngineError('CARD_INVALID', '须唯一定位任务卡标题和独立的协作状态字段')
+    if checked:
+        raise EngineError('CARD_CONFLICT', '任务卡完成勾选框已勾选，不能回写为待人工验收状态')
     index, start, end = fields[0]
     lines[index] = lines[index][:start] + STATUS + lines[index][end:]
     return ''.join(lines).encode('utf-8')

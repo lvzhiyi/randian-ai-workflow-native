@@ -12,13 +12,14 @@
 | --- | --- | --- |
 | **数据驱动进化** | 自动积累技能触发率、评审命中、钩子拦截和「待验证」比例，算出哪些规则有效、哪些该改、哪些可以删。只给候选，去留由人决定，安全类规则受保护 | `/workflow-core:metrics` |
 | **任务执行可观测** | 在只读看板查看任务进度、轮次、验证尝试和评审证据 | `/workflow-core:dashboard` |
-| **流程防护栏** | 开工前核对必读基线回执；评审前确认规定检查实际跑过且结果对应当前改动。写入门禁覆盖宿主支持的工具路径 | `workflow` |
-| **全程可控** | 按风险分轻量、标准、完整三档，流程成本和风险对齐；完整档先批准再分段实施；提交、发布、写入外部系统都要明确授权 | `tiering`、`implement` |
-| **结果可检测** | 三档规定验证与 Agent Spec + Standards 两轴均通过才为评审通过；人工验收/交付独立记录 | `verify`、`review`、`deliver` |
+| **流程防护栏** | 开工前核对必读基线 SHA-256 完整读取回执；评审前确认规定检查实际跑过且源码快照一致；写门禁覆盖宿主支持的工具路径 | `workflow` |
+| **低摩擦引擎链路** | 提供 `prepare`（自动从配置派生基线与检查计划）→ `begin`（批量吐出基线正文 + 开工 + TDD）→ `finish-step --finish-implementation` 精简入口，内联 `progress` 投影，兼顾硬门禁与低往返 | `workflow`、`kickoff` |
+| **全程可控** | 按风险分轻量、标准、完整三档，流程成本和风险对齐；完整档先批准再分段实施，合入后一键归档并查断链；提交、发布、写入外部系统均须明确授权 | `tiering`、`implement`、`archive` |
+| **结果可检测 & 自包含** | 三档规定验证与 Agent Spec + Standards 两轴通过后回写「评审通过，待人工验收」；可导出零第三方依赖的单文件 `scripts/check_docs.py` 入库，硬拦截任务卡 `[x]` 与非终态冲突，跨 CI/沙箱零脆断 | `verify`、`review`、`deliver` |
 | **扩展到任意技术栈** | 通用流程与技术栈无关；技术栈、设计工具、接口工具各是独立维度，加一个 `stack-*` 插件就能接入新技术栈。目前内置 Flutter + Pixso + Apifox | [扩展指南](#扩展新增阶段技术栈或工具) |
-| **两步接入** | 装插件后运行 `init`，自动探测项目并生成结构化配置和文档骨架，只问探测不出来的项 | `/workflow-core:init` |
+| **两步接入 & 轻骨架** | 装插件后运行 `init`，自动探测项目并生成配置和骨架；中小项目可选单文件核心基线 `docs/development/standards.md`（≤200 行），避免文档过载 | `/workflow-core:init` |
 | **中断可恢复** | 进度快照写进仓库，换会话、换人、换 Agent 都能按固定步骤接着做 | `handoff` |
-| **规则不打架** | 流程在插件、事实在项目，同一条规则只保留一处；skill 按需加载，不占常驻上下文 | [规则优先级](#插件一览) |
+| **规则不打架** | 流程在插件、事实在项目，同一条规则只保留一处；任务卡只保留 7 个核心业务字段，执行轮次归引擎、历史变更归 Git | [规则优先级](#插件一览) |
 | **数据留在本机** | 度量记录写在本机，只存枚举、计数和规则名 | Codex 的 `$CODEX_HOME`（默认 `~/.codex/`）或 `~/.claude/` |
 
 ### 任务执行与证据一目了然
@@ -30,6 +31,7 @@ Cursor 的 `workflow-core` 使用独立插件清单和 hooks。用户在聊天�
 ## 目录
 
 - [特点](#特点)
+- [与 Superpowers 的关系：增强与优势](#与-superpowers-的关系增强与优势)
 - [插件一览](#插件一览)
 - [工作流全景](#工作流全景)
 - [各阶段说明](#各阶段说明)
@@ -37,11 +39,27 @@ Cursor 的 `workflow-core` 使用独立插件清单和 hooks。用户在聊天�
 - [在项目中使用](#在项目中使用)
 - [扩展：新增阶段、技术栈或工具](#扩展新增阶段技术栈或工具)
 
+## 与 Superpowers 的关系：增强与优势
+
+[Superpowers](https://github.com/obra/superpowers) 是广受欢迎的通用工程方法论技能包，擅长需求头脑风暴（`brainstorming`）、计划拆解、严格 TDD、系统调试与子 Agent 分段执行。**`ai-dev-workflow` 与 Superpowers 并非互斥替代，而是面向真实团队业务交付的增强与上层治理**（本仓库的 `preset-flutter-pixso-apifox` 本身已将 `superpowers` 纳入组合依赖）。
+
+在保留开发轻快感的同时，`ai-dev-workflow` 针对多 Agent 实战中最容易失控的环节做了 **5 项核心增强**：
+
+| 维度 | Superpowers（通用方法论） | `ai-dev-workflow` 的增强与优势 |
+| --- | --- | --- |
+| **约束强度** | 纯 Prompt / Skill 软纪律；长上下文或模型偷懒时仍可能漏读规范、跳过测试或口头报“已通过” | **Hooks + SQLite 状态机硬门禁**：未完整读取 `baseline.required`（带 SHA-256 与字节回执，截断拒写）拦写入；未人工定档/批方案拦写入；`run` 校验真实退出码与前后源码快照一致性 |
+| **流程弹性与移动端适配** | 默认强硬 TDD（无先红测试即拒写代码），对纯逻辑极佳，但在 UI/布局/文档任务上偏教条 | **三档风险分级（轻量/标准/完整）+ 务实 TDD**：按风险匹配成本，TDD 优先非强制（不采用记录原因与替代验证）；原生支持平台裁剪（如默认仅验 Android、iOS 按需） |
+| **业务与外部系统闭环** | 聚焦单仓代码生成，不管 PRD、任务卡、设计稿、接口契约与文档一致性 | **端到端团队研发闭环**：打通 PRD 拆解（`prd-breakdown`）、7 字段精简任务卡自动回写、`[x]` 与非终态硬拦截、`design-pixso` 设计节点、`api-apifox` 接口契约及变更归档（`archive`） |
+| **跨环境可移植与执行效率** | 零配置轻快，但缺少团队统一基线校验与归档工具 | **仓库自包含 + 精简 CLI 链路**：`vendor_check_docs.py` 导出零第三方依赖单文件 `scripts/check_docs.py`，CI/容器/沙箱零脆断；`prepare → begin → finish-step --finish-implementation → run → review` 将流程 CLI 压至 4～5 步 |
+| **可观测与持续进化** | 主要依赖聊天记录与静态进度文件 | **任务级只读 Dashboard + Metrics 度量**：轮次/尝试/证据全程结构化审计，跨会话 `handoff` 精确恢复，`/workflow-core:metrics` 数据驱动识别无效规则 |
+
+**推荐搭配方式**：以 `ai-dev-workflow` 作为团队项目的主干与硬底线（管定档审批、必读基线防漏读、真实验证快照、双轴评审、任务卡回写与变更归档）；遇到开放式架构探索或复杂疑难 Bug 时，按需叠加 Superpowers 的 `brainstorming`、`systematic-debugging` 或 `test-driven-development`，兼得硬治理与高灵活度。
+
 ## 插件一览
 
 | 插件 | 维度 | 内容 |
 | --- | --- | --- |
-| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、文档规范检查脚本、总入口、三档分级、PRD 拆解、任务就绪检查、分段实施、接口契约、第三方文档、验证与失败分类、双轴代码评审（`review`）、统一交付、中断交接、任务级只读看板（`dashboard`）、流程度量报告（`metrics`） |
+| `workflow-core` | 通用流程 | 项目接入初始化（`init`）、零依赖单文件文档检查导出（`vendor_check_docs.py`）与检查脚本（`check_docs.py`）、总入口、三档分级、PRD 拆解、任务就绪检查、精简引擎 CLI（`prepare`/`begin`）、分段实施、接口契约、第三方文档、验证与失败分类、双轴代码评审（`review`）、统一交付、变更归档（`archive`）、中断交接、任务级只读看板（`dashboard`）、流程度量报告（`metrics`） |
 | `stack-flutter` | 技术栈 | 版本核对、默认检查脚本、Stop 钩子兜底静态分析、平台验证口径、评审清单、生成代码、常见坑 |
 | `design-pixso` | 设计工具 | Pixso MCP 配置、节点定位、读取层级、视觉核对 |
 | `api-apifox` | 接口工具 | Apifox CLI/MCP 接入、操作授权边界、与后端不一致时的处理 |
@@ -107,11 +125,13 @@ flowchart TD
 
 任何阶段发现新信息，都可以回到就绪检查。先区分**待确认**和**阻塞**。待确认需要负责人给出决定或权威依据，阻塞需要补齐实际执行条件。两者都只暂停受影响的部分。
 
+待实施和待确认都可以直接说「执行 T1」。Agent 会先查来源，主动问仍需用户决定的关键问题。收到明确答复并复核通过后，Agent 在同一会话继续实施。
+
 ### 各阶段遇到问题怎么处理
 
 | 阶段或情况 | 你需要做什么 | Agent 接下来做什么 |
 | --- | --- | --- |
-| **待确认** · 需求、设计、接口或验收有冲突 | 确认采用哪个版本或规则，或指出决定人和依据。接口样例与文档冲突时，请接口负责人确认字段契约。<br>**可以这样说**「T1 的空列表响应以接口负责人确认的 v2 契约为准，返回 `items: []`。请更新验收场景并继续受影响的步骤。」 | 记录问题、影响、负责人、恢复条件和来源，先推进独立部分。收到结论后复核范围和验收 |
+| **待确认** · 需求、设计、接口或验收有冲突 | 回答 Agent 的具体问题，或指出决定人和依据。<br>**可以这样回复**「以接口负责人确认的 v2 契约为准，空列表返回 `items: []`。」 | 先查权威来源，再主动问需要人决定的问题，并说明建议和影响。登记未决依赖，等答复后复核就绪条件，通过即继续 |
 | **待定档或批准** · 开工前或范围变化后 | 核对任务范围，按提示选择档位。完整档看到提案、技术设计和实施步骤后，再单独批准方案。<br>**可以这样回复** 按 Agent 的提示单独发送 `选标准档`。若选择完整档，审阅方案后按提示单独发送 `批准方案`。 | 核实引擎回执和必读基线，满足就绪条件后开工。聊天选档和批准方式见[三档、计划与批准](#三档计划与批准) |
 | **阻塞** · 缺权限、环境、设备、可用账号或上游交付 | 查看 Agent 列出的缺项，只补需要你处理的条件。例如提供测试环境入口和账号角色，凭据通过团队约定渠道交接。<br>**可以这样说**「T1 的测试环境已恢复，仍使用原测试账号。请重跑原失败检查，有缺项就列出我需要补的条件。」 | 先尝试在授权范围内排查。需外部协助时写明受影响范围、负责人和恢复条件，条件恢复后复核并重跑原检查 |
 | **验证失败或评审有必修问题** | 若目标和范围仍适用，可让 Agent 按原范围修。需要接受新行为或扩大范围时，确认新的验收和范围。<br>**可以这样说**「请核对 T1 的失败记录。若是原范围内的实现问题，就在本轮修复，重跑检查并重新评审。」 | 保留失败证据并定位原因。只需重跑时新增验证尝试。需要修改实现且当前为 `failed`、`review_failed` 或 `stale` 时，可在原授权范围内 `repair`，完成后重新验证和评审。超出范围时按下节处理 |
@@ -153,9 +173,9 @@ Claude Code 和 Codex 在支持原生选项的会话中可以直接选档。Curs
 
 ### 需求、来源与人工完成
 
-需求接收并入 `prd-breakdown`。业务规则写在需求说明，设计节点写在设计索引。开发者用模块卡查看子任务的范围、验收条件和进度摘要，实施步骤及其进度由工作流引擎维护。缺项写影响、负责人、恢复条件和来源，只暂停依赖部分。
+需求接收并入 `prd-breakdown`。业务规则写在需求说明，设计节点写在设计索引。模块任务卡收敛为 **7 个核心业务字段**（勾选框、协作状态、来源、范围与非目标、验收、依赖与待确认、可选关联变更/人工确认），不再在 Markdown 中手写分角色协作人、未认领锁、时区时间戳历史流水或重复引擎状态；实施步骤与证据由工作流引擎维护，变更历史由 Git Commit Log 承载。
 
-绑定模块卡后，双轴评审通过会自动将卡片的协作状态更新为「评审通过，待人工验收」。人工验收和交付按实际确认另行记录。团队可继续用现有工具管理功能的交付状态。回写条件和恢复方式见[任务卡回写](docs/development/workflow-engine.md#评审通过后的任务卡回写)。
+绑定模块卡后，双轴评审通过会自动将卡片的协作状态更新为「评审通过，待人工验收」（若发现完成框已被误勾 `[x]` 则报 `CARD_CONFLICT` 拒写）。人工验收和交付按实际确认另行记录；`check_docs.py` 硬拦截 `[x]` 与非终态协作状态并存。完整档合入主干后可通过 `/workflow-core:archive` 归档变更目录并自动查断链。回写条件和恢复方式见[任务卡回写](docs/development/workflow-engine.md#评审通过后的任务卡回写)。
 
 ### 基线、实施与验证
 
@@ -173,7 +193,18 @@ Spec 核对目标、范围、验收及需求来源；Standards 核对项目规�
 
 没有提醒/严格模式选择，也没有 engine 开关。引擎统一状态与规则，宿主在受支持的工具路径上执行门禁。定档和批准的验证覆盖模拟回调与引擎集成，真实客户端端到端验收仍待执行。人工确认保留为流程证据，保护范围限于宿主实际回调的工具路径。
 
-新任务通过实际引擎 CLI 的 `create --details` 登记 v2；旧任务仅经用户明确选择 `adopt-protocol`，保留旧历史但旧证据不继承。所有修改使用最新整数 `version` 与唯一 `request`，不要手写数据库或编造 mark-pass 命令。继续与总结前查询：
+新任务优先通过精简复合入口推进（底层与细粒度原子命令完全等价，所有硬门禁不变；普通写操作可省略 `--request` 自动生成 UUID，响应内联 `progress` 投影）：
+
+```bash
+# 1. 一步创建任务（自动从 ai-workflow.yaml 派生 baseline 与检查计划）+ 绑会话 + 发起聊天定档
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根" prepare --task "任务ID" --tier 标准 --acceptance "A1" --details-json '{...}' --executor agent --session "会话ID" --request-tier
+# 2. 用户定档后一步批量输出必读基线正文、登记 SHA-256 回执、开工并可选记录 TDD
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根" begin --task "任务ID" --executor agent --session "会话ID" --tdd-json '{"adopted":true}'
+# 3. 末步可加 --finish-implementation 直达待验证，随后 run + review
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根" finish-step --task "任务ID" --version "版本" --step s1 --summary "完成" --finish-implementation
+```
+
+原有细粒度原子命令（`create` / `bind-executor` / `read-baseline` / `start` / `record-tdd` / `finish-implementation`）完整保留用于分批读取、显式幂等重试与异常恢复；旧任务仅经用户明确选择 `adopt-protocol`，保留旧历史但旧证据不继承。不要手写数据库或编造 mark-pass 命令。继续与总结前查询：
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_engine_cli.py" --root "项目根" --db "项目根外的状态库" status --task "任务ID"
@@ -314,9 +345,9 @@ flowchart LR
 | 版本任务总览 / 模块卡 | 模块优先级 / 子需求状态与验收 | `prd-breakdown`、`check_docs.py` |
 | 设计索引 | 设计文件、节点映射、主稿确认 | `prd-breakdown`、`design-*` |
 | 术语表 | 已确认的业务术语、避免用词、代码命名 | `prd-breakdown`、`review`、`check_docs.py` |
-| coding / architecture / ui / api-integration / testing | 项目工程约定与检查命令 | `kickoff`、`implement`、`verify`、`api-contract` |
+| `development/standards.md`（精简模式）或 `coding / architecture / ui / api-integration / testing`（拆分模式） | 项目工程约定与检查命令（中小项目推荐单文件 `standards.md` ≤200 行作为单一必读基线） | `kickoff`、`implement`、`verify`、`api-contract` |
 
-模板在 [`templates/docs/`](plugins/workflow-core/templates/docs/)。init 用探测到的事实填写（如 `testing.md` 的真实命令、`architecture.md` 按现有目录推断的分层并标「待确认」），不留空壳。
+模板在 [`templates/docs/`](plugins/workflow-core/templates/docs/)。init 用探测到的事实填写（如 `testing.md` / `standards.md` 的真实命令、`architecture.md` 按现有目录推断的分层并标「待确认」），不留空壳；并推荐用 [`vendor_check_docs.py`](plugins/workflow-core/scripts/vendor_check_docs.py) 导出零第三方依赖的单文件 `scripts/check_docs.py` 提交进目标项目仓库，彻底脱离本机软链接与插件缓存。
 
 这份配置和文档**按项目写一次、提交进 git**，团队成员和其他 Agent 共用，不需要每人手写。项目约定变化时再次运行 `init` 会进入更新模式，只改有变化的键。字段和格式说明见 [`templates/ai-workflow.yaml`](plugins/workflow-core/templates/ai-workflow.yaml)。
 
@@ -360,6 +391,7 @@ flowchart LR
 | 查看流程度量报告 | `/workflow-core:metrics` |
 | 查看任务级只读看板 | `/workflow-core:dashboard`（默认查询，显式 `on` 开启服务） |
 | 写最终交付 | `/workflow-core:deliver` |
+| 归档已完成变更目录并查断链 | `/workflow-core:archive` |
 | 要换会话 / 接手任务 | `/workflow-core:handoff` |
 
 遇到待确认项、阻塞、验证失败或任务变更时，按[用户侧操作指南](#用户侧操作指南)处理。
@@ -377,7 +409,7 @@ flowchart LR
 | `api-integration.md` 契约清单、Mock 与真实联调、测试数据 | `workflow-core:api-contract`；项目 `NetManager`、环境变量等接入边界留项目 |
 | `需求拆解与执行流程.md` 第 1～7、9 节 | `workflow-core:prd-breakdown` + `templates/task-card.md` |
 | `需求拆解与执行流程.md` 第 8 节、默认只验 Android | 项目「工作流配置」 |
-| `scripts/check.py docs` 的链接与任务卡检查 | `workflow-core/scripts/check_docs.py`；`check.py` 保留 `git diff --check` 与 `full` 的 Flutter 检查 |
+| `scripts/check.py docs` 的链接与任务卡检查 | 用 `vendor_check_docs.py` 导出为仓库自包含 `scripts/check_docs.py`；`check.py` 保留 `git diff --check` 与 `full` 的 Flutter 检查 |
 | `architecture.md`、`ui.md`、`coding.md` | 留在项目（项目特有） |
 
 

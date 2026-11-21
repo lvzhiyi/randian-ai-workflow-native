@@ -40,9 +40,10 @@ def run_check(kind):
         return run_tests(ROOT / "tests")
     if kind in ("format", "static"):
         return run_ruff(kind)
-    script = REPO / "plugins/workflow-core/scripts/check_docs.py"
+    local_script = ROOT / "scripts/check_docs.py"
+    script = local_script if local_script.is_file() else REPO / "plugins/workflow-core/scripts/check_docs.py"
     if not script.is_file():
-        print("BLOCKED docs: 父仓库文档检查器缺失", file=sys.stderr)
+        print("BLOCKED docs: 文档检查器缺失（本地 scripts/check_docs.py 与父仓库均不存在）", file=sys.stderr)
         return 2
     return subprocess.run([sys.executable, str(script), "--root", str(ROOT),
                            "--check-config"], cwd=ROOT).returncode

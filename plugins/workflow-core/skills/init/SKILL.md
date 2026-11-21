@@ -14,24 +14,14 @@ description: 为项目生成或更新「工作流配置」`ai-workflow.yaml`，�
 
 ## 会话级规划登记（写入前必做）
 
-用户选择本技能即授权本轮相应规划产物，不需要创建假实施任务或确认实施档位。原生钩子不能自动观察技能调用；必须由技能显式调用下面的固定绝对脚本登记。先列清本轮精确文件清单，不能登记整个目录或通配符。`${SESSION}` 取当前宿主真实会话：Cursor 的 `conversation_id`，Codex 的 session/thread 标识（`CODEX_THREAD_ID` 可用时使用），Claude 的 `session_id`；取不到就报告缺项，不编造，不使用 Serena 会话 ID。
+按 `workflow` 的「规划与实施分界」先列清本轮精确文件清单，再用真实宿主会话（Cursor `conversation_id` / Codex `CODEX_THREAD_ID` / Claude `session_id`，取不到即报告缺项、不编造）显式登记；登记后只通过原生 Write / Edit / apply_patch 写入，收尾、取消或交接前务必 `close`：
 
 ```bash
 WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" open --root "项目绝对根" --session "${SESSION}" --operation init --path "精确目标.md" --ttl 1800
-WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" status --root "项目绝对根" --session "${SESSION}"
-```
-
-`HOST` 换为 `cursor` / `codex` / `claude`，脚本路径必须代入实际插件绝对路径。每个目标重复 `--path`；登记会替换本会话当前清单，最长 3600 秒。只登记本轮确需修改的文件：配置中的首页、需求、总览、术语、设计索引，以及 `prd-breakdown` 的 `docs.cards_dir` 下直接模块卡。`docs.product_root` 决定未单独配置角色的默认位置。README 只作为本轮明确列出的入口文件，不自动开放任意 README 或 `docs/*.md`。模板源码和产品代码不属于规划授权。
-
-登记后仅通过 Write / Edit / apply_patch 写入，补丁全部目标必须命中清单；不要用 Shell 重定向、脚本文件写入或 MCP 混写。收尾、取消或交接前运行（失败也报告，不静默遗留授权）：
-
-```bash
 WORKFLOW_HOST=HOST python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_planning_cli.py" close --root "项目绝对根" --session "${SESSION}"
 ```
 
-登记与开闭审计保存在引擎外置状态目录，绑定项目、会话、操作及精确路径，过期或关闭后失效。它是用户所选技能的流程防护栏，不是可信身份认证或安全沙箱，也不授权产品实施。
-
-初始化可登记根 `ai-workflow.yaml`、明确选择的 `AGENTS.md` / `CLAUDE.md` 和有限文档骨架（home / requirements / overview / glossary / design_index，dev_docs 下 coding / architecture / testing / ui / api-integration）。无配置时使用上述默认骨架，不因配置尚不存在而死锁；自定义目录时把确认后的配置草稿以单引号 JSON 通过 `--config-json '{"version":"1","docs":{"product_root":"实际目录"}}'` 内联传入 open，校验结构后按草稿推导目标。先按第 3 步确认草稿再登记，已有配置/骨架仍遵守不覆盖原则。此例外不包括 `.claude/settings.json`、源码或任意模板路径；额外配置变更需独立授权。
+`HOST` 取 `cursor` / `codex` / `claude`，重复 `--path` 列出每个目标（允许 `ai-workflow.yaml`、显式入口 `AGENTS.md` / `CLAUDE.md` / `README.md` 及有限骨架：`home / requirements / overview / glossary / design_index` 和 `dev_docs` 下 `standards / coding / architecture / testing / ui / api-integration`）。自定义目录时在确认草稿后通过 `--config-json '{"version":"1","docs":{"product_root":"实际目录"}}'` 内联传入；`.claude/settings.json`、脚本和业务代码不属于规划授权。
 
 ## 1. 探测（只读）
 
@@ -60,7 +50,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
 
 - 命令只写项目里**真实存在**的脚本或 CI 中实际执行的命令，不编造。
 - 项目没有任何代码检查入口时，轻量/标准档验证命令写技术栈插件的默认检查（Flutter 为 `stack-flutter` 的 `flutter_check.py`），并注明来自插件。
-- 文档验证命令默认写 workflow-core 自带的 `check_docs.py`；项目原有文档检查若已覆盖同样的链接和任务卡规则，在第 6 步的迁移建议里提出改用插件脚本，避免两份实现。
+- 文档验证命令推荐**仓库自包含**：在用户确认后运行下述命令，将零第三方依赖的单文件版 `check_docs.py` 导出到项目 `scripts/check_docs.py` 并提交进 Git，`verify.docs` 写 `python3 scripts/check_docs.py --root .`；避免在消费仓库建本机插件软链接或探测 `~/.claude/plugins/cache/`。未导出前可用插件内置脚本验证：
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vendor_check_docs.py" --output scripts/check_docs.py
+  ```
 - 有多个设计链接时，以文档中明确写着“权威 / 当前 / 确认”的那个为准；判断不了就作为待问项，不按出现次数或顺序猜。
 - 每个值都要能说出依据（文件 + 位置），依据只在第 3 步的展示表里给出，不写进最终配置。
 
@@ -84,11 +77,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/init/detect.sh" .
    - 两者都没有：新建 `AGENTS.md`，并询问是否同时新建只含 `@AGENTS.md` 的 `CLAUDE.md`。
    - 写入前用 `git check-ignore -v <文件>` 检查 `ai-workflow.yaml`、入口文件和 `docs/` 是否被忽略；被忽略时团队拿不到配置，先告诉用户命中的规则，由用户决定改 `.gitignore` 还是换位置，不擅自修改。
 4. 写完运行 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_docs.py" --root . --check-config`：解析错误（退出码 2）或路径不存在必须修正后再交付。
-5. **更新模式**（已有 `ai-workflow.yaml`）：逐项对比，只展示有变化的键；保留用户手写的 `notes` 和注释，不整份覆盖。旧 `spec` 和 `handoff.with_change` 只为兼容读取，纳入配置清理清单。既有变更文档按原链接查找。
+5. **更新模式**（已有 `ai-workflow.yaml`）：逐项对比，只展示有变化的键；保留用户手写的 `notes` 和注释，不整份覆盖。旧 `spec`、`handoff.with_change` 与 `verify.full` 中的 `openspec validate` 列入 OpenSpec 退场清理清单；历史 `openspec/changes/` 可通过 `workflow-core:archive`（`--changes-dir openspec/changes`）批量归档，`openspec/specs/` 作为普通项目文档保留。
 
 ## 4. 文档骨架（只补缺失的）
 
-模板在 `${CLAUDE_PLUGIN_ROOT}/templates/docs/`，生成规则见其中的 `README.md`。默认结构：
+模板在 `${CLAUDE_PLUGIN_ROOT}/templates/docs/`，生成规则见其中的 `README.md`。支持两种工程规范骨架：
+- **精简模式（推荐中小项目）**：仅生成单份 `docs/development/standards.md`（≤200 行，整合架构/代码/验证底线），`baseline.required` 指向该单文件，降低上下文占用。
+- **拆分模式（大型项目）**：分别生成 `coding.md`、`architecture.md`、`testing.md`。
+
+完整默认结构：
 
 ```
 docs/product/项目首页.md                 init
@@ -96,9 +93,10 @@ docs/product/需求/需求说明.md            init
 docs/product/任务/版本任务总览.md        init
 docs/product/设计/设计索引.md            init，有设计工具时
 docs/product/术语表.md                  init，只建骨架，不预填词条
-docs/development/coding.md              init
-docs/development/architecture.md        init
-docs/development/testing.md             init
+docs/development/standards.md           init（精简模式，与下方三份二选一）
+docs/development/coding.md              init（拆分模式）
+docs/development/architecture.md        init（拆分模式）
+docs/development/testing.md             init（拆分模式）
 docs/development/ui.md                  init，有界面时
 docs/development/api-integration.md     init，有后端接口时
 docs/product/任务/<模块>.md              prd-breakdown 首次拆出该模块时
